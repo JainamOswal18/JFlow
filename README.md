@@ -1,8 +1,8 @@
 # JFlow (`dictationd`)
 
 A local-first, push-to-talk dictation service for Hyprland. It writes audio to
-disk as you speak, streams it to Scribe v2 Realtime without rendering partial
-text, optionally applies conservative cleanup, and inserts final text once.
+disk as you speak, sends it to Scribe v2 when you release the hotkey, optionally
+applies conservative cleanup, and inserts final text once.
 
 Read [the implementation handoff](docs/IMPLEMENTATION.md) for the design,
 reliability decisions, current setup, and next steps.
@@ -34,7 +34,9 @@ systemctl --user restart dictationd.service
 ```
 
 Add the two hold/release bindings from `integrations/hypr/keybinds.lua` to
-`~/.config/hypr/custom/keybinds.lua`, then run `hyprctl reload`.
+`~/.config/hypr/custom/keybinds.lua`, replacing `YOUR_USER` with your Linux
+username, then run `hyprctl reload`. The explicit path is required because
+Hyprland may not include `~/.local/bin` in its environment.
 
 For this machine, the service files, UI asset, config, and keybindings have
 already been installed and the two user services are enabled. A fresh setup
@@ -60,10 +62,10 @@ the clipboard instead of being typed into the wrong window.
 
 ## Providers
 
-`elevenlabs_realtime` is the default. It streams raw PCM as you speak but only
-uses committed text after release. If that connection fails, the queued WAV is
-sent to the ElevenLabs file endpoint on retry. `sarvam` and `whisper_cli` are
-also supported by changing `asr.provider` in `config.json`.
+`elevenlabs_batch` is the stable default. It sends the saved WAV to Scribe v2
+after you release the hotkey, so a network problem can never leave recording
+stuck. `elevenlabs_realtime` remains experimental, while `sarvam` and
+`whisper_cli` are supported by changing `asr.provider` in `config.json`.
 
 For a compatible cleanup endpoint, enable `cleanup`, set its endpoint/model,
 and add `LLM_API_KEY`. Cleanup failure never loses a transcription: raw ASR

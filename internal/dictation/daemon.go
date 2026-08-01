@@ -102,6 +102,9 @@ func SendCommand(socket string, cmd Command) (Response, error) {
 		return resp, fmt.Errorf("connect to daemon: %w", err)
 	}
 	defer c.Close()
+	// Hotkeys should fail visibly rather than leave a background shell process
+	// waiting forever if the daemon is unhealthy or a provider is slow to start.
+	_ = c.SetDeadline(time.Now().Add(5 * time.Second))
 	if err := json.NewEncoder(c).Encode(cmd); err != nil {
 		return resp, err
 	}
@@ -199,7 +202,7 @@ func (d *Daemon) beginRecording(job *Job) (*recording, error) {
 	}
 	r.wav = wav
 	if d.cfg.ASR.Provider == "elevenlabs_realtime" {
-		streamCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		streamCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		r.realtime, _ = StartRealtimeScribe(streamCtx, d.cfg)
 		cancel()
 	}
@@ -243,7 +246,10 @@ func (d *Daemon) Stop() error {
 	if err := r.cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return err
 	}
-	cmdErr := r.cmd.Wait()
+	// pw-record exits with status 1 on SIGINT on this PipeWire build. We sent
+	// that signal deliberately to finalize the recording, so the WAV/pipe result
+	// (not the process exit code) determines whether capture succeeded.
+	_ = r.cmd.Wait()
 	pipeErr := <-r.done
 	if err := r.wav.Close(); err != nil {
 		pipeErr = err
@@ -279,13 +285,6 @@ func (d *Daemon) Stop() error {
 		_ = d.store.Save(job)
 		d.setStatus("error", "Microphone capture failed")
 		return pipeErr
-	}
-	if cmdErr != nil && !isInterrupt(cmdErr) {
-		job.Status = StatusFailed
-		job.Error = cmdErr.Error()
-		_ = d.store.Save(job)
-		d.setStatus("error", "Microphone capture failed")
-		return cmdErr
 	}
 	job.Status = StatusQueued
 	job.Error = ""

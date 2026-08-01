@@ -14,9 +14,10 @@ dictation.
 
 - A single Go binary, `dictationd`, with a small Unix-socket CLI.
 - PipeWire capture through `pw-record` at 16 kHz mono PCM.
-- Real-time ElevenLabs Scribe v2 streaming while recording, with partial
-  transcripts ignored. On release, only committed text is considered.
-- A file-upload fallback for the saved WAV when the real-time connection fails.
+- Stable ElevenLabs Scribe v2 file transcription after release. The saved WAV
+  means provider/network trouble never holds the microphone open.
+- An experimental real-time Scribe adapter, retained for later benchmarking but
+  not selected as the default hotkey path.
 - Optional provider adapters for Sarvam REST and local `whisper-cli`.
 - Optional OpenAI-compatible LLM cleanup with a deliberately conservative
   prompt. Cleanup failure keeps and delivers the raw ASR result.
@@ -45,11 +46,11 @@ written atomically and the audio file is written as capture progresses. This
 means Wi-Fi drops, API rate limits, and service restarts preserve a retriable
 recording.
 
-### Hidden real-time text
+### Release-only text
 
-Streaming begins while you speak to reduce release-to-result delay, but partial
-text is intentionally discarded. This gives the model the full utterance for
-filler removal and changed thoughts, without a distracting live preview.
+The production path waits until release and sends the complete utterance. This
+gives the model full context for filler removal and changed thoughts, without a
+distracting live preview or a network operation in the hotkey start path.
 
 ### Safe text insertion
 
@@ -81,6 +82,8 @@ binary, or user-specific config.
 - The `dictationd.service` and `dictationd-ui.service` user units are enabled
   and were confirmed active.
 - Hyprland was reloaded after adding the bindings.
+- The bindings use the absolute binary path because this Hyprland session's
+  `PATH` does not include `~/.local/bin`.
 - The configured PipeWire target is `easyeffects_source`. EasyEffects on this
   machine already has RNNoise and VAD enabled on its input chain.
 - The local queue defaults to: one-hour successful-audio retention, 14-day
@@ -116,8 +119,9 @@ Do not place the credential file in this repository or OneDrive.
 
 `asr.provider` in `config.json` selects the recognition path:
 
-- `elevenlabs_realtime` (default): streams Scribe v2 Realtime during capture;
-  retries use the regular Scribe file endpoint.
+- `elevenlabs_batch` (default): sends the saved WAV to Scribe v2 after release.
+- `elevenlabs_realtime` (experimental): streams during capture; keep it off
+  until it has been benchmarked without hotkey stalls on this desktop.
 - `sarvam`: sends the saved WAV to Sarvam's REST endpoint. Use this after a
   personal accuracy comparison for Indian-accent English and occasional
   Hinglish.

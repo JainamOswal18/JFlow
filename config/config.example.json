@@ -9,13 +9,14 @@
   "history_retention_days": 30,
   "retry": { "max_attempts": 4, "initial_delay_seconds": 3, "max_delay_seconds": 120 },
   "asr": {
-    "provider": "elevenlabs_realtime",
+    "provider": "elevenlabs_batch",
     "api_key_env": "ELEVENLABS_API_KEY",
     "language": "eng",
     "secondary_languages": ["hin"],
     "keyterms": ["Hyprland", "PipeWire", "Wayland"],
     "no_verbatim": true,
-    "model": "scribe_v2_realtime"
+    "endpoint": "https://api.elevenlabs.io/v1/speech-to-text",
+    "model": "scribe_v2"
   },
   "cleanup": { "enabled": false, "api_key_env": "LLM_API_KEY", "endpoint": "", "model": "" },
   "ui": { "enabled": true }
