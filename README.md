@@ -52,7 +52,7 @@ should follow the commands above.
 
 ## Commands
 
-`dictationd toggle`, `dictationd cancel`, `dictationd retry-last`,
+`dictationd toggle`, `dictationd cancel`, `dictationd retry-last`, `dictationd dismiss-last`,
 `dictationd history`, and `dictationd status` all communicate with the same
 background daemon over a user-only Unix socket.
 

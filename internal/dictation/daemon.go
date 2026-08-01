@@ -137,6 +137,8 @@ func (d *Daemon) handleConnection(c net.Conn) {
 			err = d.Cancel()
 		case "retry-last":
 			err = d.RetryLast()
+		case "dismiss-last":
+			err = d.DismissLast()
 		case "retry":
 			err = d.Retry(cmd.JobID)
 		case "status":
@@ -359,6 +361,27 @@ func (d *Daemon) RetryLast() error {
 	}
 	return errors.New("no failed dictation to retry")
 }
+func (d *Daemon) DismissLast() error {
+	if d.isRecording() {
+		return errors.New("cannot dismiss while dictating")
+	}
+	jobs, err := d.store.List()
+	if err != nil {
+		return err
+	}
+	for _, j := range jobs {
+		if j.Status == StatusFailed || j.Status == StatusRetryWait {
+			j.Status = StatusCancelled
+			j.Error = "Dismissed by user"
+			if err := d.store.Save(j); err != nil {
+				return err
+			}
+			d.setStatus("idle", "Ready")
+			return nil
+		}
+	}
+	return errors.New("no failed dictation to dismiss")
+}
 func (d *Daemon) isRecording() bool { d.mu.Lock(); defer d.mu.Unlock(); return d.recording != nil }
 func (d *Daemon) enqueue(id string) {
 	select {
@@ -534,6 +557,18 @@ func (d *Daemon) fail(job *Job, err error) {
 	_ = d.store.Save(job)
 	d.setStatus("error", "Dictation saved for retry")
 	notify("Dictation saved for retry", "The recording is safe. Use dictationd retry-last when the service is available.")
+	d.clearErrorSoon()
+}
+
+func (d *Daemon) clearErrorSoon() {
+	go func() {
+		time.Sleep(3 * time.Second)
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		if d.recording == nil && d.phase.Phase == "error" {
+			d.setStatusLocked("idle", "Ready")
+		}
+	}()
 }
 func (d *Daemon) deliver(job *Job) error {
 	if d.cfg.SafeInsertion && job.Target.Address != "" {

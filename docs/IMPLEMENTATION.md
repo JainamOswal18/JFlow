@@ -138,6 +138,9 @@ not summarize, translate, or invent text.
 - Retryable provider/network errors use exponential backoff (up to four tries).
 - Failed jobs retain the source audio for manual retry with
   `dictationd retry-last` or `Super+Shift+V`.
+- A failed job can be removed from the active retry path with
+  `dictationd dismiss-last`; an error indicator clears automatically after a
+  brief flash.
 - If cloud transcription works but insertion is unsafe or fails, the final text
   goes to the clipboard and the job is retained.
 - On daemon restart, interrupted recordings are repaired and queued when audio
