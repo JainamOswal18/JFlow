@@ -405,7 +405,9 @@ func (d *Daemon) worker(ctx context.Context) {
 	}
 }
 func (d *Daemon) recoveryLoop(ctx context.Context) {
-	t := time.NewTicker(15 * time.Second)
+	// This is only a restart-safety net. Normal retries are scheduled directly
+	// when an attempt fails, so they do not wait for the next scan.
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -552,7 +554,8 @@ func (d *Daemon) fail(job *Job, err error) {
 		job.NextAttemptAt = time.Now().Add(delay)
 		job.Error = err.Error()
 		_ = d.store.Save(job)
-		d.setStatus("queued", "Saved safely; retrying soon")
+		d.setStatus("retrying", fmt.Sprintf("Retrying %d/%d", job.Attempts, d.cfg.Retry.MaxAttempts))
+		d.scheduleRetry(job.ID, delay)
 		return
 	}
 	job.Status = StatusFailed
@@ -561,6 +564,15 @@ func (d *Daemon) fail(job *Job, err error) {
 	d.setStatus("error", "Dictation saved for retry")
 	notify("Dictation saved for retry", "The recording is safe. Use dictationd retry-last when the service is available.")
 	d.clearErrorSoon()
+}
+
+func (d *Daemon) scheduleRetry(id string, delay time.Duration) {
+	go func() {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		<-timer.C
+		d.enqueue(id)
+	}()
 }
 
 func (d *Daemon) clearErrorSoon() {

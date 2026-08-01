@@ -60,6 +60,10 @@ Typical use: hold `Super+R`, speak, then release it. Use `Super+Shift+V` to
 retry the last failed job. If text cannot be inserted safely, it is copied to
 the clipboard instead of being typed into the wrong window.
 
+Transient transcription failures retry automatically after 3, 6, and 12
+seconds. The bottom-center indicator shows `Retrying 1/4` (and so on); only
+non-retryable errors such as invalid credentials require attention.
+
 ## Providers
 
 `elevenlabs_batch` is the stable default. It sends the saved WAV to Scribe v2

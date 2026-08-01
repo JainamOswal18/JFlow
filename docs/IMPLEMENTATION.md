@@ -23,9 +23,11 @@ dictation.
   prompt. Cleanup failure keeps and delivers the raw ASR result.
 - A durable, per-job JSON store with atomic writes. No database service,
   container, Python runtime, or audio is required in the source repository.
-- Exponential retry for retryable network/provider failures.
-- A tiny standalone Quickshell status pill: listening, processing, queued, or
-  error. It has no access to raw audio, transcripts, or credentials.
+- Immediate 3/6/12-second exponential retry for retryable network/provider
+  failures, with a restart-safe recovery scan as backup.
+- A tiny standalone Quickshell status pill at the bottom center: listening,
+  processing, retrying, or error. It has no access to raw audio, transcripts,
+  or credentials.
 - Hyprland hold/release binding for `Super+R` and a recovery binding on
   `Super+Shift+V`.
 - User-level systemd units for the daemon and indicator.
