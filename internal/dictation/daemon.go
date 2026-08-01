@@ -339,6 +339,9 @@ func (d *Daemon) Retry(id string) error {
 	if _, err := os.Stat(job.AudioPath); err != nil {
 		return fmt.Errorf("saved audio is unavailable: %w", err)
 	}
+	if err := repairWAV(job.AudioPath, d.cfg.SampleRate); err != nil {
+		return fmt.Errorf("repair saved audio: %w", err)
+	}
 	job.Status = StatusQueued
 	job.Error = ""
 	job.NextAttemptAt = time.Time{}
@@ -669,7 +672,8 @@ func wavHeader(bytes uint32, sampleRate int) []byte {
 	h := make([]byte, 44)
 	copy(h[0:4], "RIFF")
 	binary.LittleEndian.PutUint32(h[4:8], 36+bytes)
-	copy(h[8:12], "WAVEfmt ")
+	copy(h[8:12], "WAVE")
+	copy(h[12:16], "fmt ")
 	binary.LittleEndian.PutUint32(h[16:20], 16)
 	binary.LittleEndian.PutUint16(h[20:22], 1)
 	binary.LittleEndian.PutUint16(h[22:24], 1)

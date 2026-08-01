@@ -45,6 +45,13 @@ func TestWavWriter(t *testing.T) {
 	if info.Size() != 48 {
 		t.Fatalf("got %d-byte wav, want 48", info.Size())
 	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b[8:12]) != "WAVE" || string(b[12:16]) != "fmt " {
+		t.Fatal("WAV header has an invalid format chunk")
+	}
 }
 
 func TestRepairWAV(t *testing.T) {
