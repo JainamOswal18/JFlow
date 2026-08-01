@@ -1,0 +1,4 @@
+/dictationd
+*.test
+coverage.out
+.env

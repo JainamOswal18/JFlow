@@ -1,0 +1,15 @@
+[Unit]
+Description=Dictationd minimal status indicator
+After=graphical-session.target dictationd.service
+Wants=dictationd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qs -p %h/.local/share/dictationd/ui/VoiceFlow.qml
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+
+[Install]
+WantedBy=default.target

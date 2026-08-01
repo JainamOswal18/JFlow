@@ -1,0 +1,22 @@
+{
+  "data_dir": "/home/USER/.local/share/dictationd",
+  "state_dir": "/home/USER/.local/state/dictationd",
+  "runtime_dir": "/run/user/UID/dictationd",
+  "mic_target": "easyeffects_source",
+  "sample_rate": 16000,
+  "safe_insertion": true,
+  "failed_audio_retention_days": 14,
+  "history_retention_days": 30,
+  "retry": { "max_attempts": 4, "initial_delay_seconds": 3, "max_delay_seconds": 120 },
+  "asr": {
+    "provider": "elevenlabs_realtime",
+    "api_key_env": "ELEVENLABS_API_KEY",
+    "language": "eng",
+    "secondary_languages": ["hin"],
+    "keyterms": ["Hyprland", "PipeWire", "Wayland"],
+    "no_verbatim": true,
+    "model": "scribe_v2_realtime"
+  },
+  "cleanup": { "enabled": false, "api_key_env": "LLM_API_KEY", "endpoint": "", "model": "" },
+  "ui": { "enabled": true }
+}

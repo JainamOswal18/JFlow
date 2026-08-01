@@ -1,0 +1,15 @@
+[Unit]
+Description=Dictationd local dictation queue
+After=graphical-session.target pipewire.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/dictationd daemon
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+
+[Install]
+WantedBy=default.target
