@@ -525,6 +525,11 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	job.Status = StatusDelivering
 	_ = d.store.Save(job)
 	d.setStatus("processing", "Inserting")
+	// Wayland does not expose whether the focused surface has an editable text
+	// field. wtype can therefore succeed even when the application discards the
+	// text. Put every completed dictation on the clipboard first, so paste is a
+	// reliable recovery path regardless of where it was dictated.
+	job.ClipboardBackup = copyClipboard(job.FinalText) == nil
 	job.DeliveryAttempted = true
 	_ = d.store.Save(job)
 	if err := d.deliver(job); err != nil {
@@ -589,13 +594,20 @@ func (d *Daemon) deliver(job *Job) error {
 	if d.cfg.SafeInsertion && job.Target.Address != "" {
 		current := activeWindow()
 		if current.Address != job.Target.Address {
-			_ = copyClipboard(job.FinalText)
+			if !job.ClipboardBackup {
+				return errors.New("focused window changed and clipboard backup failed")
+			}
 			return errors.New("focused window changed")
 		}
 	}
 	if err := exec.Command("wtype", job.FinalText).Run(); err != nil {
-		_ = copyClipboard(job.FinalText)
+		if !job.ClipboardBackup {
+			return fmt.Errorf("text insertion failed and clipboard backup failed: %w", err)
+		}
 		return err
+	}
+	if !job.ClipboardBackup {
+		notify("Clipboard unavailable", "The dictation was inserted, but could not be saved to the clipboard.")
 	}
 	return nil
 }

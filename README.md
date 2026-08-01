@@ -57,8 +57,9 @@ should follow the commands above.
 background daemon over a user-only Unix socket.
 
 Typical use: hold `Super+R`, speak, then release it. Use `Super+Shift+V` to
-retry the last failed job. If text cannot be inserted safely, it is copied to
-the clipboard instead of being typed into the wrong window.
+retry the last failed job. Every completed dictation is copied to the clipboard
+before insertion, so it can always be pasted if the focused app has no editable
+field or rejects simulated typing.
 
 Transient transcription failures retry automatically after 3, 6, and 12
 seconds. The bottom-center indicator shows `Retrying 1/4` (and so on); only
