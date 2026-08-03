@@ -135,8 +135,14 @@ func (d *Daemon) handleConnection(c net.Conn) {
 			}
 		case "cancel":
 			err = d.Cancel()
+		case "cancel-if-recording":
+			err = d.CancelIfRecording()
 		case "retry-last":
 			err = d.RetryLast()
+		case "copy-last":
+			err = d.CopyLast()
+		case "undo-last":
+			err = d.UndoLast()
 		case "dismiss-last":
 			err = d.DismissLast()
 		case "retry":
@@ -180,7 +186,24 @@ func (d *Daemon) Start() error {
 	}
 	d.recording = r
 	d.setStatusLocked("recording", "Listening")
+	d.playCue("message-new-instant")
+	go d.recordingWatchdog(r)
 	return nil
+}
+
+// recordingWatchdog deliberately uses Stop rather than Cancel: when the limit
+// is reached, the captured WAV is finalized and transcribed just as if the
+// hotkey had been released.
+func (d *Daemon) recordingWatchdog(r *recording) {
+	timer := time.NewTimer(time.Duration(d.cfg.MaxRecordingSecs) * time.Second)
+	defer timer.Stop()
+	<-timer.C
+	d.mu.Lock()
+	current := d.recording == r
+	d.mu.Unlock()
+	if current {
+		_ = d.stopRecording(r, "Recording limit reached; finalizing audio")
+	}
 }
 
 func (d *Daemon) beginRecording(job *Job) (*recording, error) {
@@ -238,12 +261,21 @@ func (d *Daemon) beginRecording(job *Job) (*recording, error) {
 func (d *Daemon) Stop() error {
 	d.mu.Lock()
 	r := d.recording
+	d.mu.Unlock()
 	if r == nil {
+		return errors.New("not recording")
+	}
+	return d.stopRecording(r, "Finalizing audio")
+}
+
+func (d *Daemon) stopRecording(r *recording, message string) error {
+	d.mu.Lock()
+	if d.recording != r {
 		d.mu.Unlock()
 		return errors.New("not recording")
 	}
 	d.recording = nil
-	d.setStatusLocked("processing", "Finalizing audio")
+	d.setStatusLocked("processing", message)
 	d.mu.Unlock()
 	if err := r.cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		// The recording has already been detached from the active state. Make a
@@ -277,6 +309,7 @@ func (d *Daemon) Stop() error {
 	if err := r.wav.Close(); err != nil {
 		pipeErr = err
 	}
+	d.playCue("complete")
 	if r.realtime != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		text, err := r.realtime.Commit(ctx)
@@ -322,16 +355,25 @@ func isInterrupt(err error) bool {
 	return errors.As(err, &exit) && (exit.ProcessState.ExitCode() == -1 || strings.Contains(strings.ToLower(err.Error()), "interrupt"))
 }
 func (d *Daemon) Cancel() error {
-	if !d.isRecording() {
-		return errors.New("not recording")
-	}
 	d.mu.Lock()
 	r := d.recording
+	if r == nil {
+		d.mu.Unlock()
+		return errors.New("not recording")
+	}
 	d.recording = nil
 	d.mu.Unlock()
 	_ = r.cmd.Process.Kill()
-	_ = r.cmd.Wait()
-	<-r.done
+	waitDone := make(chan struct{}, 1)
+	go func() { _ = r.cmd.Wait(); waitDone <- struct{}{} }()
+	select {
+	case <-waitDone:
+	case <-time.After(2 * time.Second):
+	}
+	select {
+	case <-r.done:
+	case <-time.After(2 * time.Second):
+	}
 	_ = r.wav.Close()
 	if r.realtime != nil {
 		r.realtime.Close()
@@ -343,8 +385,16 @@ func (d *Daemon) Cancel() error {
 		_ = d.store.Save(job)
 		_ = os.Remove(job.AudioPath)
 	}
+	d.playCue("dialog-warning")
 	d.setStatus("idle", "Ready")
 	return nil
+}
+
+func (d *Daemon) CancelIfRecording() error {
+	if !d.isRecording() {
+		return nil
+	}
+	return d.Cancel()
 }
 func (d *Daemon) Retry(id string) error {
 	if d.isRecording() {
@@ -405,6 +455,45 @@ func (d *Daemon) DismissLast() error {
 		}
 	}
 	return errors.New("no failed dictation to dismiss")
+}
+
+func (d *Daemon) CopyLast() error {
+	jobs, err := d.store.List()
+	if err != nil {
+		return err
+	}
+	for _, j := range jobs {
+		if strings.TrimSpace(j.FinalText) != "" {
+			return copyClipboard(j.FinalText)
+		}
+	}
+	return errors.New("no completed dictation to copy")
+}
+
+func (d *Daemon) UndoLast() error {
+	jobs, err := d.store.List()
+	if err != nil {
+		return err
+	}
+	for _, j := range jobs {
+		if j.Status != StatusDelivered || j.DeliveredAt.IsZero() {
+			continue
+		}
+		if time.Since(j.DeliveredAt) > 12*time.Second {
+			return errors.New("undo window expired")
+		}
+		if j.Target.Address == "" || activeWindow().Address != j.Target.Address {
+			return errors.New("original app is no longer focused")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err := exec.CommandContext(ctx, "wtype", "-M", "ctrl", "-k", "z", "-m", "ctrl").Run()
+		if ctx.Err() != nil {
+			return fmt.Errorf("undo timed out: %w", ctx.Err())
+		}
+		return err
+	}
+	return errors.New("no inserted dictation to undo")
 }
 func (d *Daemon) isRecording() bool { d.mu.Lock(); defer d.mu.Unlock(); return d.recording != nil }
 func (d *Daemon) enqueue(id string) {
@@ -561,19 +650,20 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		if job.ClipboardBackup {
 			job.Error = "Copied to clipboard: " + err.Error()
 			notify("Dictation ready", "Text was copied to the clipboard. Click a field and paste it.")
+			d.showAction("copied", "Copied to clipboard", job.ID, false, false)
 		} else {
 			job.Error = fmt.Sprintf("Text could not be inserted or copied: %v (clipboard: %v)", err, clipboardErr)
 			notify("Dictation delivery failed", "Text could not be inserted or copied. The transcript is retained in JFlow history.")
+			d.showAction("error", "Delivery failed", job.ID, false, true)
 		}
 		_ = d.store.Save(job)
-		d.setStatus("idle", "Ready")
 		return
 	}
 	job.Status = StatusDelivered
 	job.DeliveredAt = time.Now().UTC()
 	job.Error = ""
 	_ = d.store.Save(job)
-	d.setStatus("idle", "Ready")
+	d.showAction("delivered", "Inserted", job.ID, true, false)
 }
 func (d *Daemon) fail(job *Job, err error) {
 	job.Attempts++
@@ -594,9 +684,9 @@ func (d *Daemon) fail(job *Job, err error) {
 	job.Status = StatusFailed
 	job.Error = err.Error()
 	_ = d.store.Save(job)
-	d.setStatus("error", "Dictation saved for retry")
+	d.playCue("dialog-error")
+	d.showAction("error", "Dictation saved for retry", job.ID, false, true)
 	notify("Dictation saved for retry", "The recording is safe. Use dictationd retry-last when the service is available.")
-	d.clearErrorSoon()
 }
 
 func (d *Daemon) scheduleRetry(id string, delay time.Duration) {
@@ -682,6 +772,17 @@ func notify(title, body string) {
 	_ = exec.Command("notify-send", "--app-name=dictationd", title, body).Run()
 }
 
+func (d *Daemon) playCue(event string) {
+	if !d.cfg.Sound.Enabled {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = exec.CommandContext(ctx, "canberra-gtk-play", "-i", event).Run()
+	}()
+}
+
 func (d *Daemon) Status() Status { d.mu.Lock(); defer d.mu.Unlock(); return d.phase }
 func (d *Daemon) setStatus(phase, msg string) {
 	d.mu.Lock()
@@ -689,7 +790,14 @@ func (d *Daemon) setStatus(phase, msg string) {
 	d.setStatusLocked(phase, msg)
 }
 func (d *Daemon) setStatusLocked(phase, msg string) {
-	d.phase = Status{Phase: phase, Message: msg, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	d.setActionStatusLocked(phase, msg, "", false, false)
+	if d.recording != nil {
+		d.phase.ActiveJobID = d.recording.jobID
+	}
+}
+
+func (d *Daemon) setActionStatusLocked(phase, msg, jobID string, canUndo, canRetry bool) {
+	d.phase = Status{Phase: phase, Message: msg, ActionJobID: jobID, CanCopy: jobID != "", CanUndo: canUndo, CanRetry: canRetry, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	if d.recording != nil {
 		d.phase.ActiveJobID = d.recording.jobID
 	}
@@ -698,6 +806,20 @@ func (d *Daemon) setStatusLocked(phase, msg string) {
 	if os.WriteFile(tmp, b, 0600) == nil {
 		_ = os.Rename(tmp, d.cfg.StatusPath())
 	}
+}
+
+func (d *Daemon) showAction(phase, message, jobID string, canUndo, canRetry bool) {
+	d.mu.Lock()
+	d.setActionStatusLocked(phase, message, jobID, canUndo, canRetry)
+	d.mu.Unlock()
+	go func() {
+		time.Sleep(8 * time.Second)
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		if d.recording == nil && d.phase.ActionJobID == jobID && d.phase.Phase == phase {
+			d.setStatusLocked("idle", "Ready")
+		}
+	}()
 }
 
 type wavWriter struct {

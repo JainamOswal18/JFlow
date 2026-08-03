@@ -10,7 +10,10 @@ Scope {
     id: root
     property string phase: "idle"
     property string message: ""
-    readonly property bool visibleIndicator: phase === "recording" || phase === "processing" || phase === "retrying" || phase === "queued" || phase === "error"
+    property bool canCopy: false
+    property bool canUndo: false
+    property bool canRetry: false
+    readonly property bool visibleIndicator: phase === "recording" || phase === "processing" || phase === "retrying" || phase === "queued" || phase === "error" || phase === "delivered" || phase === "copied"
     readonly property bool recording: phase === "recording"
     readonly property bool working: phase === "processing" || phase === "retrying" || phase === "queued"
 
@@ -19,7 +22,15 @@ Scope {
         if (phase === "retrying") return message.length > 0 ? message : "Retrying"
         if (phase === "queued") return "Saved locally"
         if (phase === "processing") return message.length > 0 ? message : "Processing"
+        if (phase === "delivered") return "Inserted"
+        if (phase === "copied") return "Copied"
         return message
+    }
+
+    function runAction(action) {
+        if (actionProc.running) return
+        actionProc.command = ["dictationd", action]
+        actionProc.running = true
     }
 
     Timer {
@@ -41,9 +52,17 @@ Scope {
                     const reply = JSON.parse(text)
                     root.phase = reply.status.phase || "idle"
                     root.message = reply.status.message || ""
+                    root.canCopy = reply.status.can_copy || false
+                    root.canUndo = reply.status.can_undo || false
+                    root.canRetry = reply.status.can_retry || false
                 } catch (_) { }
             }
         }
+    }
+
+    Process {
+        id: actionProc
+        command: ["true"]
     }
 
     PanelWindow {
@@ -113,6 +132,33 @@ Scope {
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
                     font.letterSpacing: 0.3
+                }
+                Rectangle {
+                    visible: root.canCopy
+                    implicitWidth: 46
+                    implicitHeight: 24
+                    radius: 12
+                    color: "#ffffff"
+                    Text { anchors.centerIn: parent; text: "Copy"; color: "#090909"; font.pixelSize: 11; font.weight: Font.DemiBold }
+                    MouseArea { anchors.fill: parent; onClicked: root.runAction("copy-last") }
+                }
+                Rectangle {
+                    visible: root.canUndo
+                    implicitWidth: 48
+                    implicitHeight: 24
+                    radius: 12
+                    color: "#ffffff"
+                    Text { anchors.centerIn: parent; text: "Undo"; color: "#090909"; font.pixelSize: 11; font.weight: Font.DemiBold }
+                    MouseArea { anchors.fill: parent; onClicked: root.runAction("undo-last") }
+                }
+                Rectangle {
+                    visible: root.canRetry
+                    implicitWidth: 48
+                    implicitHeight: 24
+                    radius: 12
+                    color: "#ffffff"
+                    Text { anchors.centerIn: parent; text: "Retry"; color: "#090909"; font.pixelSize: 11; font.weight: Font.DemiBold }
+                    MouseArea { anchors.fill: parent; onClicked: root.runAction("retry-last") }
                 }
             }
         }

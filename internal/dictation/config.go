@@ -15,6 +15,7 @@ type Config struct {
 	RuntimeDir       string        `json:"runtime_dir"`
 	MicTarget        string        `json:"mic_target"`
 	SampleRate       int           `json:"sample_rate"`
+	MaxRecordingSecs int           `json:"max_recording_seconds"`
 	SafeInsertion    bool          `json:"safe_insertion"`
 	FailedRetention  int           `json:"failed_audio_retention_days"`
 	HistoryRetention int           `json:"history_retention_days"`
@@ -22,6 +23,7 @@ type Config struct {
 	ASR              ASRConfig     `json:"asr"`
 	Cleanup          CleanupConfig `json:"cleanup"`
 	UI               UIConfig      `json:"ui"`
+	Sound            SoundConfig   `json:"sound"`
 }
 
 type RetryConfig struct {
@@ -54,6 +56,10 @@ type UIConfig struct {
 	Enabled bool `json:"enabled"`
 }
 
+type SoundConfig struct {
+	Enabled bool `json:"enabled"`
+}
+
 func defaultBase(env, fallback string) string {
 	if v := os.Getenv(env); v != "" {
 		return v
@@ -72,7 +78,7 @@ func DefaultConfig() Config {
 		RuntimeDir: filepath.Join(runtime, "dictationd"),
 		// This source already exists on this machine and is the EasyEffects input
 		// chain (RNNoise/VAD). Set it to "" to use PipeWire's default source.
-		MicTarget: "easyeffects_source", SampleRate: 16000, SafeInsertion: true, FailedRetention: 14, HistoryRetention: 30,
+		MicTarget: "easyeffects_source", SampleRate: 16000, MaxRecordingSecs: 300, SafeInsertion: true, FailedRetention: 14, HistoryRetention: 30,
 		// One automatic retry keeps brief network failures invisible without
 		// allowing a stalled cloud provider to hold up dictation indefinitely.
 		Retry: RetryConfig{MaxAttempts: 2, InitialSecs: 3, MaxSecs: 120},
@@ -81,6 +87,7 @@ func DefaultConfig() Config {
 		ASR:     ASRConfig{Provider: "elevenlabs_batch", APIKeyEnv: "ELEVENLABS_API_KEY", Language: "eng", Secondary: []string{"hin"}, NoVerbatim: true, Model: "scribe_v2", Endpoint: "https://api.elevenlabs.io/v1/speech-to-text"},
 		Cleanup: CleanupConfig{Enabled: false, APIKeyEnv: "LLM_API_KEY", Endpoint: "", Model: ""},
 		UI:      UIConfig{Enabled: true},
+		Sound:   SoundConfig{Enabled: true},
 	}
 }
 
@@ -105,6 +112,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.SampleRate <= 0 {
 		cfg.SampleRate = 16000
+	}
+	if cfg.MaxRecordingSecs <= 0 {
+		cfg.MaxRecordingSecs = 300
 	}
 	if cfg.Retry.MaxAttempts <= 0 {
 		cfg.Retry.MaxAttempts = 2

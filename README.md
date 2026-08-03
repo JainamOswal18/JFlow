@@ -61,6 +61,27 @@ retry the last failed job. Every completed dictation is copied to the clipboard
 before insertion, so it can always be pasted if the focused app has no editable
 field or rejects simulated typing.
 
+Press `Escape` to cancel an active recording; it is non-consuming while idle,
+so applications still receive their normal Escape keypress. The bottom overlay
+briefly offers Copy after every completed dictation, Undo for a recent safe
+insertion, and Retry after a failed transcription.
+
+## Recording limit and sounds
+
+`max_recording_seconds` is a safety watchdog. When it is reached, JFlow stops
+capture normally and sends the audio it already recorded for transcription; it
+does not discard the message. This installation is deliberately set to `30`
+seconds for testing. After it has been verified, change it to `300` for the
+requested five-minute limit and restart `dictationd.service`.
+
+```json
+"max_recording_seconds": 300,
+"sound": { "enabled": true }
+```
+
+The local start, stop, cancel, and permanent-failure sounds are controlled by
+`sound.enabled`; they never send audio or data to a cloud service.
+
 ## Wake recovery
 
 Hibernate or suspend can invalidate a Wayland client's connection. Install the

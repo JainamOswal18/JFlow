@@ -44,7 +44,7 @@ func main() {
 		if err := d.Run(ctx); err != nil {
 			fatal(err)
 		}
-	case "start", "stop", "toggle", "cancel", "retry-last", "dismiss-last", "status", "history":
+	case "start", "stop", "toggle", "cancel", "cancel-if-recording", "retry-last", "dismiss-last", "copy-last", "undo-last", "status", "history":
 		resp, err := call(cfg, dictation.Command{Action: os.Args[1]})
 		if err != nil {
 			fatal(err)
@@ -99,5 +99,5 @@ func call(cfg dictation.Config, cmd dictation.Command) (dictation.Response, erro
 func printJSON(v any) { b, _ := json.MarshalIndent(v, "", "  "); fmt.Println(string(b)) }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "dictationd:", err); os.Exit(1) }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|cancel|retry-last|dismiss-last|retry JOB_ID|status|history>")
+	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|undo-last|retry JOB_ID|status|history>")
 }
