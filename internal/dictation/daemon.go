@@ -605,7 +605,7 @@ func (d *Daemon) deliver(job *Job) error {
 			return errors.New("focused window changed")
 		}
 	}
-	if err := exec.Command("wtype", job.FinalText).Run(); err != nil {
+	if err := typeText(job.FinalText); err != nil {
 		if !job.ClipboardBackup {
 			return fmt.Errorf("text insertion failed and clipboard backup failed: %w", err)
 		}
@@ -632,13 +632,28 @@ func activeWindow() WindowTarget {
 	return WindowTarget{Address: out.Address, Class: out.Class, Title: out.Title}
 }
 func copyClipboard(text string) error {
-	cmd := exec.Command("wl-copy", "--type", "text/plain;charset=utf-8")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "wl-copy", "--type", "text/plain;charset=utf-8")
 	cmd.Stdin = strings.NewReader(text)
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return fmt.Errorf("wl-copy timed out after 2 seconds: %w", ctx.Err())
+	}
 	if err != nil {
-		return fmt.Errorf("wl-copy: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("wl-copy: %w", err)
 	}
 	return nil
+}
+
+func typeText(text string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err := exec.CommandContext(ctx, "wtype", text).Run()
+	if ctx.Err() != nil {
+		return fmt.Errorf("wtype timed out after 2 seconds: %w", ctx.Err())
+	}
+	return err
 }
 func notify(title, body string) {
 	_ = exec.Command("notify-send", "--app-name=dictationd", title, body).Run()
