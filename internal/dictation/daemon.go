@@ -20,12 +20,14 @@ import (
 )
 
 type Daemon struct {
-	cfg       Config
-	store     *Store
-	mu        sync.Mutex
-	recording *recording
-	phase     Status
-	work      chan string
+	cfg              Config
+	store            *Store
+	mu               sync.Mutex
+	recording        *recording
+	processingID     string
+	processingCancel context.CancelFunc
+	phase            Status
+	work             chan string
 }
 
 type recording struct {
@@ -373,10 +375,18 @@ func (d *Daemon) Cancel() error {
 }
 
 func (d *Daemon) CancelIfRecording() error {
-	if !d.isRecording() {
+	if d.isRecording() {
+		return d.Cancel()
+	}
+	d.mu.Lock()
+	cancel := d.processingCancel
+	d.mu.Unlock()
+	if cancel == nil {
 		return nil
 	}
-	return d.Cancel()
+	cancel()
+	d.setStatus("processing", "Cancelling")
+	return nil
 }
 func (d *Daemon) Retry(id string) error {
 	if d.isRecording() {
@@ -470,7 +480,19 @@ func (d *Daemon) worker(ctx context.Context) {
 	for {
 		select {
 		case id := <-d.work:
-			d.process(ctx, id)
+			jobCtx, cancel := context.WithCancel(ctx)
+			d.mu.Lock()
+			d.processingID = id
+			d.processingCancel = cancel
+			d.mu.Unlock()
+			d.process(jobCtx, id)
+			cancel()
+			d.mu.Lock()
+			if d.processingID == id {
+				d.processingID = ""
+				d.processingCancel = nil
+			}
+			d.mu.Unlock()
 		case <-ctx.Done():
 			return
 		}
@@ -572,6 +594,9 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	if err != nil || job.Status == StatusDelivered || job.Status == StatusCancelled {
 		return
 	}
+	if d.cancelledProcessing(ctx, job) {
+		return
+	}
 	if job.Transcript == "" {
 		job.Status = StatusTranscribing
 		_ = d.store.Save(job)
@@ -581,6 +606,9 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		pctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 		text, err := ProviderFor(d.cfg).Transcribe(pctx, job.AudioPath, d.cfg)
 		cancel()
+		if d.cancelledProcessing(ctx, job) {
+			return
+		}
 		if err != nil {
 			d.fail(job, err)
 			return
@@ -591,6 +619,9 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	_ = d.store.Save(job)
 	d.setStatus("processing", "Cleaning")
 	text, cleanErr := Clean(ctx, job.Transcript, d.cfg)
+	if d.cancelledProcessing(ctx, job) {
+		return
+	}
 	if cleanErr != nil {
 		text = job.Transcript
 		job.Error = "Cleanup skipped: " + cleanErr.Error()
@@ -599,11 +630,17 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	job.Status = StatusDelivering
 	_ = d.store.Save(job)
 	d.setStatus("processing", "Inserting")
+	if d.cancelledProcessing(ctx, job) {
+		return
+	}
 	// Wayland does not expose whether the focused surface has an editable text
 	// field. wtype can therefore succeed even when the application discards the
 	// text. Put every completed dictation on the clipboard first, so paste is a
 	// reliable recovery path regardless of where it was dictated.
 	clipboardErr := copyClipboard(job.FinalText)
+	if d.cancelledProcessing(ctx, job) {
+		return
+	}
 	job.ClipboardBackup = clipboardErr == nil
 	job.DeliveryAttempted = true
 	_ = d.store.Save(job)
@@ -626,6 +663,19 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	job.Error = ""
 	_ = d.store.Save(job)
 	d.showAction("delivered", "Inserted", job.ID, false)
+}
+
+func (d *Daemon) cancelledProcessing(ctx context.Context, job *Job) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	job.Status = StatusCancelled
+	job.Error = "Cancelled during processing"
+	_ = d.store.Save(job)
+	_ = os.Remove(job.AudioPath)
+	d.playCue("dialog-warning")
+	d.setStatus("idle", "Ready")
+	return true
 }
 func (d *Daemon) fail(job *Job, err error) {
 	job.Attempts++
@@ -778,6 +828,8 @@ func (d *Daemon) setActionStatusLocked(phase, msg, jobID string, canUndo, canRet
 	d.phase = Status{Phase: phase, Message: msg, ActionJobID: jobID, CanCopy: jobID != "", CanRetry: canRetry, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	if d.recording != nil {
 		d.phase.ActiveJobID = d.recording.jobID
+	} else if d.processingID != "" {
+		d.phase.ActiveJobID = d.processingID
 	}
 	b, _ := json.Marshal(d.phase)
 	tmp := d.cfg.StatusPath() + ".tmp"
