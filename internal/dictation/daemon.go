@@ -462,7 +462,12 @@ func (d *Daemon) CopyLast() error {
 	}
 	for _, j := range jobs {
 		if strings.TrimSpace(j.FinalText) != "" {
-			return copyClipboard(j.FinalText)
+			if err := copyClipboard(j.FinalText); err != nil {
+				d.showAction("error", "Copy failed", j.ID, false)
+				return err
+			}
+			d.showAction("copied", "Copied", j.ID, false)
+			return nil
 		}
 	}
 	return errors.New("no completed dictation to copy")
@@ -728,6 +733,21 @@ func copyClipboard(text string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("wl-copy: %w", err)
+	}
+	// wl-copy's parent can exit before the background selection owner is ready.
+	// Read the selection back before reporting success, so UI feedback is never a
+	// best-effort claim.
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer verifyCancel()
+	got, err := exec.CommandContext(verifyCtx, "wl-paste", "--no-newline").Output()
+	if verifyCtx.Err() != nil {
+		return fmt.Errorf("clipboard verification timed out: %w", verifyCtx.Err())
+	}
+	if err != nil {
+		return fmt.Errorf("clipboard verification: %w", err)
+	}
+	if string(got) != text {
+		return errors.New("clipboard verification did not match copied text")
 	}
 	return nil
 }
