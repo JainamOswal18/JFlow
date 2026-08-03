@@ -185,23 +185,7 @@ func (d *Daemon) Start() error {
 	d.recording = r
 	d.setStatusLocked("recording", "Listening")
 	d.playCue("message-new-instant")
-	go d.recordingWatchdog(r)
 	return nil
-}
-
-// recordingWatchdog deliberately uses Stop rather than Cancel: when the limit
-// is reached, the captured WAV is finalized and transcribed just as if the
-// hotkey had been released.
-func (d *Daemon) recordingWatchdog(r *recording) {
-	timer := time.NewTimer(time.Duration(d.cfg.MaxRecordingSecs) * time.Second)
-	defer timer.Stop()
-	<-timer.C
-	d.mu.Lock()
-	current := d.recording == r
-	d.mu.Unlock()
-	if current {
-		_ = d.stopRecording(r, "Recording limit reached; finalizing audio")
-	}
 }
 
 func (d *Daemon) beginRecording(job *Job) (*recording, error) {
@@ -782,6 +766,7 @@ func (d *Daemon) setStatus(phase, msg string) {
 	defer d.mu.Unlock()
 	d.setStatusLocked(phase, msg)
 }
+
 func (d *Daemon) setStatusLocked(phase, msg string) {
 	d.setActionStatusLocked(phase, msg, "", false, false)
 	if d.recording != nil {

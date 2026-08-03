@@ -66,16 +66,9 @@ so applications still receive their normal Escape keypress. The bottom overlay
 briefly offers Copy after every completed dictation and Retry after a failed
 transcription.
 
-## Recording limit and sounds
-
-`max_recording_seconds` is a safety watchdog. When it is reached, JFlow stops
-capture normally and sends the audio it already recorded for transcription; it
-does not discard the message. This installation is deliberately set to `30`
-seconds for testing. After it has been verified, change it to `300` for the
-requested five-minute limit and restart `dictationd.service`.
+## Sounds
 
 ```json
-"max_recording_seconds": 300,
 "sound": { "enabled": true }
 ```
 
