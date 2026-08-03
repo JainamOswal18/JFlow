@@ -22,6 +22,7 @@ import (
 type Daemon struct {
 	cfg              Config
 	store            *Store
+	vocabulary       *VocabularyStore
 	mu               sync.Mutex
 	recording        *recording
 	processingID     string
@@ -48,7 +49,7 @@ func NewDaemon(cfg Config) (*Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &Daemon{cfg: cfg, store: store, phase: Status{Phase: "idle"}, work: make(chan string, 32)}
+	d := &Daemon{cfg: cfg, store: store, vocabulary: NewVocabularyStore(cfg.VocabularyPath()), phase: Status{Phase: "idle"}, work: make(chan string, 32)}
 	d.recoverInterruptedJobs()
 	return d, nil
 }
@@ -87,14 +88,18 @@ func (d *Daemon) Run(ctx context.Context) error {
 }
 
 type Command struct {
-	Action string `json:"action"`
-	JobID  string `json:"job_id,omitempty"`
+	Action      string `json:"action"`
+	JobID       string `json:"job_id,omitempty"`
+	Query       string `json:"query,omitempty"`
+	Heard       string `json:"heard,omitempty"`
+	Replacement string `json:"replacement,omitempty"`
 }
 type Response struct {
-	OK     bool   `json:"ok"`
-	Error  string `json:"error,omitempty"`
-	Status Status `json:"status"`
-	Jobs   []*Job `json:"jobs,omitempty"`
+	OK         bool              `json:"ok"`
+	Error      string            `json:"error,omitempty"`
+	Status     Status            `json:"status"`
+	Jobs       []*Job            `json:"jobs,omitempty"`
+	Vocabulary []VocabularyEntry `json:"vocabulary,omitempty"`
 }
 
 func SendCommand(socket string, cmd Command) (Response, error) {
@@ -143,13 +148,26 @@ func (d *Daemon) handleConnection(c net.Conn) {
 			err = d.RetryLast()
 		case "copy-last":
 			err = d.CopyLast()
+		case "copy":
+			err = d.Copy(cmd.JobID)
 		case "dismiss-last":
 			err = d.DismissLast()
 		case "retry":
 			err = d.Retry(cmd.JobID)
 		case "status":
 		case "history":
-			resp.Jobs, err = d.store.List()
+			resp.Jobs, err = d.store.Search(cmd.Query)
+		case "delete-history":
+			err = d.DeleteHistory(cmd.JobID)
+		case "vocabulary":
+			resp.Vocabulary, err = d.vocabulary.List()
+		case "vocabulary-add":
+			_, err = d.vocabulary.Add(cmd.Heard, cmd.Replacement)
+			if err == nil {
+				resp.Vocabulary, err = d.vocabulary.List()
+			}
+		case "vocabulary-delete":
+			err = d.vocabulary.Delete(cmd.JobID)
 		default:
 			err = fmt.Errorf("unknown action %q", cmd.Action)
 		}
@@ -449,6 +467,19 @@ func (d *Daemon) DismissLast() error {
 	return errors.New("no failed dictation to dismiss")
 }
 
+func (d *Daemon) DeleteHistory(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("job ID is required")
+	}
+	d.mu.Lock()
+	busy := (d.recording != nil && d.recording.jobID == id) || d.processingID == id
+	d.mu.Unlock()
+	if busy {
+		return errors.New("cannot delete an active dictation")
+	}
+	return d.store.Delete(id)
+}
+
 func (d *Daemon) CopyLast() error {
 	jobs, err := d.store.List()
 	if err != nil {
@@ -456,15 +487,26 @@ func (d *Daemon) CopyLast() error {
 	}
 	for _, j := range jobs {
 		if strings.TrimSpace(j.FinalText) != "" {
-			if err := copyClipboard(j.FinalText); err != nil {
-				d.showAction("error", "Copy failed", j.ID, false)
-				return err
-			}
-			d.showAction("copied", "Copied", j.ID, false)
-			return nil
+			return d.Copy(j.ID)
 		}
 	}
 	return errors.New("no completed dictation to copy")
+}
+
+func (d *Daemon) Copy(id string) error {
+	job, err := d.store.Get(id)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(job.FinalText) == "" {
+		return errors.New("dictation has no text to copy")
+	}
+	if err := copyClipboard(job.FinalText); err != nil {
+		d.showAction("error", "Copy failed", job.ID, false)
+		return err
+	}
+	d.showAction("copied", "Copied", job.ID, false)
+	return nil
 }
 
 func (d *Daemon) isRecording() bool { d.mu.Lock(); defer d.mu.Unlock(); return d.recording != nil }
@@ -626,6 +668,7 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		text = job.Transcript
 		job.Error = "Cleanup skipped: " + cleanErr.Error()
 	}
+	text = d.vocabulary.Apply(text)
 	job.FinalText = text
 	job.Status = StatusDelivering
 	_ = d.store.Save(job)

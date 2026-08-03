@@ -20,9 +20,11 @@ Add `ELEVENLABS_API_KEY` to `~/.config/dictationd/credentials.env`, then copy
 the provided user units and UI asset:
 
 ```bash
-mkdir -p ~/.config/systemd/user ~/.local/share/dictationd/ui
+mkdir -p ~/.config/systemd/user ~/.local/share/dictationd/ui ~/.local/share/applications
 cp packaging/systemd/dictationd*.service ~/.config/systemd/user/
 cp ui/VoiceFlow.qml ~/.local/share/dictationd/ui/
+cp ui/JFlow.qml ~/.local/share/dictationd/ui/
+cp packaging/desktop/JFlow.desktop ~/.local/share/applications/
 systemctl --user daemon-reload
 systemctl --user enable --now dictationd.service dictationd-ui.service
 ```
@@ -47,6 +49,7 @@ should follow the commands above.
 - `~/.local/share/dictationd/jobs/<id>/audio.wav` is written **while** recording.
 - Successful raw audio is deleted after one hour; failed audio is kept for 14 days.
 - Job metadata and final transcript are kept locally for 30 days by default.
+- Vocabulary corrections live in `~/.config/dictationd/vocabulary.json`.
 - Secrets stay in `~/.config/dictationd/credentials.env` (mode `0600`) and are
   never stored in job files or logs.
 
@@ -65,6 +68,23 @@ Press `Escape` to cancel an active recording; it is non-consuming while idle,
 so applications still receive their normal Escape keypress. The bottom overlay
 briefly offers Copy after every completed dictation and Retry after a failed
 transcription.
+
+## JFlow Library
+
+Run `dictationd library` or launch **JFlow** from your application launcher to
+open the normal desktop window. It is separate from the recording overlay, so
+closing it can never interrupt an active dictation. The Library lets you:
+
+- Search local history by text, source app, status, or error.
+- Copy a specific transcript, retry a failed recording, or delete an item.
+- Add local `heard as → write as` vocabulary corrections.
+
+Corrections are applied after transcription and before insertion. They use no
+ElevenLabs keyterms, incur no cloud surcharge, and are matched as complete
+words or phrases (case-insensitively). For example, `hyper land → Hyprland`.
+
+The optional `Super+Shift+H` binding in
+`integrations/hypr/keybinds.lua` opens the Library directly.
 
 ## Sounds
 

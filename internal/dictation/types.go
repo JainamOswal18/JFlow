@@ -39,6 +39,17 @@ type Job struct {
 	ClipboardBackup   bool         `json:"clipboard_backup"`
 }
 
+// VocabularyEntry is a local, post-transcription correction. It deliberately
+// lives outside the cloud ASR keyterms feature so common names and technical
+// words can be corrected without sending extra data or paying a keyterm fee.
+type VocabularyEntry struct {
+	ID          string    `json:"id"`
+	Heard       string    `json:"heard"`
+	Replacement string    `json:"replacement"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type Status struct {
 	Phase       string `json:"phase"`
 	ActiveJobID string `json:"active_job_id,omitempty"`

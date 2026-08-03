@@ -26,6 +26,31 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStoreSearchAndRejectsUnsafeDelete(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &Job{ID: "history-test", Status: StatusDelivered, CreatedAt: time.Now(), AudioPath: filepath.Join(dir, "history-test", "audio.wav"), FinalText: "Open JFlow Library", Target: WindowTarget{Class: "foot"}}
+	if err := s.Save(j); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := s.Search("jflow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 1 || jobs[0].ID != j.ID {
+		t.Fatalf("unexpected search results: %#v", jobs)
+	}
+	if err := s.Delete("../history-test"); err == nil {
+		t.Fatal("unsafe job ID was accepted")
+	}
+	if err := s.Delete(j.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWavWriter(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audio.wav")
 	w, err := newWavWriter(path, 16000)

@@ -8,3 +8,7 @@ hl.bind("SUPER + R", hl.dsp.exec_cmd("/home/YOUR_USER/.local/bin/dictationd stop
 -- Optional recovery shortcut; Super+Shift+R is already your scratchpad.
 hl.bind("SUPER + SHIFT + V", hl.dsp.exec_cmd("/home/YOUR_USER/.local/bin/dictationd retry-last"),
     { description = "Voice: Retry last dictation" })
+
+-- Optional: open the searchable JFlow Library (history and vocabulary).
+hl.bind("SUPER + SHIFT + H", hl.dsp.exec_cmd("/home/YOUR_USER/.local/bin/dictationd library"),
+    { description = "Voice: Open JFlow Library" })

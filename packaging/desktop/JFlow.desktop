@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=JFlow
+Comment=Local dictation history and vocabulary
+Exec=dictationd library
+Terminal=false
+Categories=Utility;Office;
+Keywords=dictation;voice;transcription;history;vocabulary;

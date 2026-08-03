@@ -23,11 +23,16 @@ dictation.
   prompt. Cleanup failure keeps and delivers the raw ASR result.
 - A durable, per-job JSON store with atomic writes. No database service,
   container, Python runtime, or audio is required in the source repository.
-- Immediate 3/6/12-second exponential retry for retryable network/provider
+- One automatic retry after three seconds for retryable network/provider
   failures, with a restart-safe recovery scan as backup.
 - A tiny standalone Quickshell status pill at the bottom center: listening,
   processing, retrying, or error. It has no access to raw audio, transcripts,
   or credentials.
+- A separate Quickshell **JFlow Library** desktop window, opened on demand. It
+  searches history and manages local vocabulary without making the recording
+  overlay larger or permanently consuming desktop resources.
+- Atomic local vocabulary corrections applied after ASR and before insertion.
+  This avoids ElevenLabs' paid keyterm feature for ordinary names and terms.
 - Hyprland hold/release binding for `Super+R` and a recovery binding on
   `Super+Shift+V`.
 - User-level systemd units for the daemon and indicator.
@@ -70,10 +75,13 @@ window, the job requires explicit recovery rather than risking duplicated text.
 | Binary | `~/.local/bin/dictationd` |
 | Settings | `~/.config/dictationd/config.json` |
 | API keys (mode `0600`) | `~/.config/dictationd/credentials.env` |
+| Vocabulary corrections | `~/.config/dictationd/vocabulary.json` |
 | Queue and local history | `~/.local/share/dictationd/jobs/` |
 | Runtime socket/status | `$XDG_RUNTIME_DIR/dictationd/` |
 | User units | `~/.config/systemd/user/dictationd*.service` |
 | Quickshell indicator | `~/.local/share/dictationd/ui/VoiceFlow.qml` |
+| JFlow Library window | `~/.local/share/dictationd/ui/JFlow.qml` |
+| Application launcher entry | `~/.local/share/applications/JFlow.desktop` |
 | Hyprland bindings | `~/.config/hypr/custom/keybinds.lua` |
 
 The Git repository deliberately contains no credentials, recordings, built
@@ -90,6 +98,24 @@ binary, or user-specific config.
   machine already has RNNoise and VAD enabled on its input chain.
 - The local queue defaults to: one-hour successful-audio retention, 14-day
   failed-audio retention, and 30-day metadata/transcript retention.
+
+## Phase 2: local history and vocabulary
+
+The Library is a standard Quickshell `FloatingWindow`, so Hyprland treats it
+like a normal desktop application. It starts only when `dictationd library` is
+run (or the **JFlow** launcher entry is opened), uses `qs --no-duplicate` to
+make repeat opens harmless, and can be closed without changing daemon state.
+
+History stays in the existing durable job directories. The daemon exposes
+search, exact-item copy, retry, and delete operations over its existing
+user-only socket; the UI does not read audio files, credentials, or the socket
+directly. Active jobs cannot be deleted.
+
+Vocabulary is a small JSON array in `~/.config/dictationd/vocabulary.json`.
+Writes use a same-directory temporary file followed by rename, with mode 0600.
+Each `heard as → write as` rule is applied as a case-insensitive whole word or
+phrase after transcription (and optional cleanup), before the final text is
+saved, copied, and inserted. Longer phrases are applied first.
 
 ## First-use steps
 
@@ -137,7 +163,8 @@ not summarize, translate, or invent text.
 
 ## Recovery behaviour
 
-- Retryable provider/network errors use exponential backoff (up to four tries).
+- Retryable provider/network errors receive one automatic retry after three
+  seconds; the recording remains available for a manual retry afterward.
 - Failed jobs retain the source audio for manual retry with
   `dictationd retry-last` or `Super+Shift+V`.
 - A failed job can be removed from the active retry path with
@@ -166,13 +193,15 @@ in the credential file during implementation.
 
 ## Next steps
 
-1. Add the API key and do a short real dictation test.
+1. Deploy this branch, then confirm a real dictation appears in the Library and
+   test Copy, Retry on a deliberately failed item, Delete, and one vocabulary
+   correction.
 2. Benchmark Scribe against Sarvam using 15–20 of your own English-first,
    Indian-accent sentences with names, technical terms, occasional Hinglish,
    corrections, and noisy-room samples. Choose one primary provider rather
    than chaining ASR systems.
-3. Add your frequent names, project terms, and commands to `asr.keyterms`.
+3. Add frequent names, project terms, and commands through the local Library
+   vocabulary rather than paid cloud keyterms.
 4. Decide whether cleanup is needed after testing Scribe's `no_verbatim` mode.
    If enabled, test it carefully with technical text and code-related speech.
-5. Optionally add a small history/retry window or notification action buttons;
-   the durable queue and CLI are already the recovery foundation.
+5. Phase 3 can add optional per-app profiles and hands-free mode.

@@ -162,7 +162,11 @@ func LoadCredentials(path string) error {
 	return nil
 }
 
-func (c Config) SocketPath() string             { return filepath.Join(c.RuntimeDir, "control.sock") }
-func (c Config) StatusPath() string             { return filepath.Join(c.RuntimeDir, "status.json") }
-func (c Config) JobsDir() string                { return filepath.Join(c.DataDir, "jobs") }
+func (c Config) SocketPath() string { return filepath.Join(c.RuntimeDir, "control.sock") }
+func (c Config) StatusPath() string { return filepath.Join(c.RuntimeDir, "status.json") }
+func (c Config) JobsDir() string    { return filepath.Join(c.DataDir, "jobs") }
+func (c Config) VocabularyPath() string {
+	return filepath.Join(defaultBase("XDG_CONFIG_HOME", ".config"), "dictationd", "vocabulary.json")
+}
+func (c Config) LibraryUIPath() string          { return filepath.Join(c.DataDir, "ui", "JFlow.qml") }
 func (c Config) CleanupInterval() time.Duration { return 30 * time.Minute }

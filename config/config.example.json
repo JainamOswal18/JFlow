@@ -19,5 +19,6 @@
     "model": "scribe_v2"
   },
   "cleanup": { "enabled": false, "api_key_env": "LLM_API_KEY", "endpoint": "", "model": "" },
-  "ui": { "enabled": true }
+  "ui": { "enabled": true },
+  "sound": { "enabled": true }
 }

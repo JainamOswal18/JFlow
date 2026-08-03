@@ -2,10 +2,12 @@ package dictation
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -26,6 +28,9 @@ func (s *Store) jobPath(id string) string   { return filepath.Join(s.jobDir(id),
 func (s *Store) AudioPath(id string) string { return filepath.Join(s.jobDir(id), "audio.wav") }
 
 func (s *Store) Save(j *Job) error {
+	if !validJobID(j.ID) {
+		return errors.New("invalid job ID")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.saveLocked(j)
@@ -46,6 +51,9 @@ func (s *Store) saveLocked(j *Job) error {
 	return os.Rename(tmp, s.jobPath(j.ID))
 }
 func (s *Store) Get(id string) (*Job, error) {
+	if !validJobID(id) {
+		return nil, errors.New("invalid job ID")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	b, err := os.ReadFile(s.jobPath(id))
@@ -81,6 +89,45 @@ func (s *Store) List() ([]*Job, error) {
 	}
 	sort.Slice(jobs, func(i, k int) bool { return jobs[i].CreatedAt.After(jobs[k].CreatedAt) })
 	return jobs, nil
+}
+
+func (s *Store) Search(query string) ([]*Job, error) {
+	jobs, err := s.List()
+	if err != nil {
+		return jobs, err
+	}
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return jobs, nil
+	}
+	query = strings.ToLower(query)
+	filtered := make([]*Job, 0, len(jobs))
+	for _, job := range jobs {
+		fields := []string{job.Transcript, job.FinalText, job.Error, job.Target.Class, job.Target.Title, string(job.Status)}
+		for _, field := range fields {
+			if strings.Contains(strings.ToLower(field), query) {
+				filtered = append(filtered, job)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+func (s *Store) Delete(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !validJobID(id) {
+		return errors.New("invalid job ID")
+	}
+	if _, err := os.Stat(s.jobDir(id)); err != nil {
+		return err
+	}
+	return os.RemoveAll(s.jobDir(id))
+}
+
+func validJobID(id string) bool {
+	return id != "" && id == filepath.Base(id) && id != "." && id != ".." && !strings.ContainsRune(id, filepath.Separator)
 }
 func (s *Store) DueJobs(now time.Time) ([]*Job, error) {
 	jobs, err := s.List()
