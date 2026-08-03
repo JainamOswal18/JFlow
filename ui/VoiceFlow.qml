@@ -11,7 +11,6 @@ Scope {
     property string phase: "idle"
     property string message: ""
     property bool canCopy: false
-    property bool canUndo: false
     property bool canRetry: false
     readonly property bool visibleIndicator: phase === "recording" || phase === "processing" || phase === "retrying" || phase === "queued" || phase === "error" || phase === "delivered" || phase === "copied"
     readonly property bool recording: phase === "recording"
@@ -53,7 +52,6 @@ Scope {
                     root.phase = reply.status.phase || "idle"
                     root.message = reply.status.message || ""
                     root.canCopy = reply.status.can_copy || false
-                    root.canUndo = reply.status.can_undo || false
                     root.canRetry = reply.status.can_retry || false
                 } catch (_) { }
             }
@@ -141,15 +139,6 @@ Scope {
                     color: "#ffffff"
                     Text { anchors.centerIn: parent; text: "Copy"; color: "#090909"; font.pixelSize: 11; font.weight: Font.DemiBold }
                     MouseArea { anchors.fill: parent; onClicked: root.runAction("copy-last") }
-                }
-                Rectangle {
-                    visible: root.canUndo
-                    implicitWidth: 48
-                    implicitHeight: 24
-                    radius: 12
-                    color: "#ffffff"
-                    Text { anchors.centerIn: parent; text: "Undo"; color: "#090909"; font.pixelSize: 11; font.weight: Font.DemiBold }
-                    MouseArea { anchors.fill: parent; onClicked: root.runAction("undo-last") }
                 }
                 Rectangle {
                     visible: root.canRetry

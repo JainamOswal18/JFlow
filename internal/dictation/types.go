@@ -45,7 +45,6 @@ type Status struct {
 	ActionJobID string `json:"action_job_id,omitempty"`
 	Message     string `json:"message,omitempty"`
 	CanCopy     bool   `json:"can_copy,omitempty"`
-	CanUndo     bool   `json:"can_undo,omitempty"`
 	CanRetry    bool   `json:"can_retry,omitempty"`
 	UpdatedAt   string `json:"updated_at"`
 }

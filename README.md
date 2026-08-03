@@ -63,8 +63,8 @@ field or rejects simulated typing.
 
 Press `Escape` to cancel an active recording; it is non-consuming while idle,
 so applications still receive their normal Escape keypress. The bottom overlay
-briefly offers Copy after every completed dictation, Undo for a recent safe
-insertion, and Retry after a failed transcription.
+briefly offers Copy after every completed dictation and Retry after a failed
+transcription.
 
 ## Recording limit and sounds
 

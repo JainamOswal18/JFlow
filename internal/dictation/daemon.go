@@ -141,8 +141,6 @@ func (d *Daemon) handleConnection(c net.Conn) {
 			err = d.RetryLast()
 		case "copy-last":
 			err = d.CopyLast()
-		case "undo-last":
-			err = d.UndoLast()
 		case "dismiss-last":
 			err = d.DismissLast()
 		case "retry":
@@ -470,31 +468,6 @@ func (d *Daemon) CopyLast() error {
 	return errors.New("no completed dictation to copy")
 }
 
-func (d *Daemon) UndoLast() error {
-	jobs, err := d.store.List()
-	if err != nil {
-		return err
-	}
-	for _, j := range jobs {
-		if j.Status != StatusDelivered || j.DeliveredAt.IsZero() {
-			continue
-		}
-		if time.Since(j.DeliveredAt) > 12*time.Second {
-			return errors.New("undo window expired")
-		}
-		if j.Target.Address == "" || activeWindow().Address != j.Target.Address {
-			return errors.New("original app is no longer focused")
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		err := exec.CommandContext(ctx, "wtype", "-M", "ctrl", "-k", "z", "-m", "ctrl").Run()
-		if ctx.Err() != nil {
-			return fmt.Errorf("undo timed out: %w", ctx.Err())
-		}
-		return err
-	}
-	return errors.New("no inserted dictation to undo")
-}
 func (d *Daemon) isRecording() bool { d.mu.Lock(); defer d.mu.Unlock(); return d.recording != nil }
 func (d *Daemon) enqueue(id string) {
 	select {
@@ -650,11 +623,11 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		if job.ClipboardBackup {
 			job.Error = "Copied to clipboard: " + err.Error()
 			notify("Dictation ready", "Text was copied to the clipboard. Click a field and paste it.")
-			d.showAction("copied", "Copied to clipboard", job.ID, false, false)
+			d.showAction("copied", "Copied to clipboard", job.ID, false)
 		} else {
 			job.Error = fmt.Sprintf("Text could not be inserted or copied: %v (clipboard: %v)", err, clipboardErr)
 			notify("Dictation delivery failed", "Text could not be inserted or copied. The transcript is retained in JFlow history.")
-			d.showAction("error", "Delivery failed", job.ID, false, true)
+			d.showAction("error", "Delivery failed", job.ID, true)
 		}
 		_ = d.store.Save(job)
 		return
@@ -663,7 +636,7 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	job.DeliveredAt = time.Now().UTC()
 	job.Error = ""
 	_ = d.store.Save(job)
-	d.showAction("delivered", "Inserted", job.ID, true, false)
+	d.showAction("delivered", "Inserted", job.ID, false)
 }
 func (d *Daemon) fail(job *Job, err error) {
 	job.Attempts++
@@ -685,7 +658,7 @@ func (d *Daemon) fail(job *Job, err error) {
 	job.Error = err.Error()
 	_ = d.store.Save(job)
 	d.playCue("dialog-error")
-	d.showAction("error", "Dictation saved for retry", job.ID, false, true)
+	d.showAction("error", "Dictation saved for retry", job.ID, true)
 	notify("Dictation saved for retry", "The recording is safe. Use dictationd retry-last when the service is available.")
 }
 
@@ -797,7 +770,7 @@ func (d *Daemon) setStatusLocked(phase, msg string) {
 }
 
 func (d *Daemon) setActionStatusLocked(phase, msg, jobID string, canUndo, canRetry bool) {
-	d.phase = Status{Phase: phase, Message: msg, ActionJobID: jobID, CanCopy: jobID != "", CanUndo: canUndo, CanRetry: canRetry, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	d.phase = Status{Phase: phase, Message: msg, ActionJobID: jobID, CanCopy: jobID != "", CanRetry: canRetry, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	if d.recording != nil {
 		d.phase.ActiveJobID = d.recording.jobID
 	}
@@ -808,9 +781,9 @@ func (d *Daemon) setActionStatusLocked(phase, msg, jobID string, canUndo, canRet
 	}
 }
 
-func (d *Daemon) showAction(phase, message, jobID string, canUndo, canRetry bool) {
+func (d *Daemon) showAction(phase, message, jobID string, canRetry bool) {
 	d.mu.Lock()
-	d.setActionStatusLocked(phase, message, jobID, canUndo, canRetry)
+	d.setActionStatusLocked(phase, message, jobID, false, canRetry)
 	d.mu.Unlock()
 	go func() {
 		time.Sleep(8 * time.Second)
