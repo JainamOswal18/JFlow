@@ -61,6 +61,21 @@ retry the last failed job. Every completed dictation is copied to the clipboard
 before insertion, so it can always be pasted if the focused app has no editable
 field or rejects simulated typing.
 
+## Wake recovery
+
+Hibernate or suspend can invalidate a Wayland client's connection. Install the
+included system sleep hook once so both JFlow services restart automatically
+after wake:
+
+```bash
+sudo install -D -m 0755 ~/Code/dictationd/scripts/dictationd-resume \
+  /etc/systemd/system-sleep/dictationd-resume
+```
+
+It restarts only `dictationd.service` and `dictationd-ui.service` after a
+completed suspend or hibernate; it does not run before sleep or alter power
+settings.
+
 Transient transcription failures retry automatically after 3, 6, and 12
 seconds. The bottom-center indicator shows `Retrying 1/4` (and so on); only
 non-retryable errors such as invalid credentials require attention.

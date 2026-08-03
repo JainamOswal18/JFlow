@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Called by systemd after a completed system sleep operation.
+# Refreshes JFlow's Wayland-facing user services after resume.
+set -eu
+
+case "$1:$2" in
+  hibernate:post|suspend:post|hybrid-sleep:post|suspend-then-hibernate:post)
+    exec /usr/bin/runuser -u jainamop -- /usr/bin/env \
+      XDG_RUNTIME_DIR=/run/user/1000 \
+      DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+      /usr/bin/systemctl --user restart dictationd.service dictationd-ui.service
+    ;;
+esac
