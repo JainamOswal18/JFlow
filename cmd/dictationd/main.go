@@ -47,66 +47,38 @@ func main() {
 			fatal(err)
 		}
 	case "start", "stop", "toggle", "cancel", "cancel-if-recording", "retry-last", "dismiss-last", "copy-last", "status":
-		resp, err := call(cfg, dictation.Command{Action: os.Args[1]})
-		if err != nil {
-			fatal(err)
-		}
-		if !resp.OK {
-			fatal(errors.New(resp.Error))
-		}
-		printJSON(resp)
+		callAndPrint(cfg, dictation.Command{Action: os.Args[1]})
 	case "copy":
 		if len(os.Args) != 3 {
 			fatal(errors.New("usage: dictationd copy JOB_ID"))
 		}
-		callOK(cfg, dictation.Command{Action: "copy", JobID: os.Args[2]})
+		callAndPrint(cfg, dictation.Command{Action: "copy", JobID: os.Args[2]})
 	case "history":
-		resp, err := call(cfg, dictation.Command{Action: "history", Query: strings.Join(os.Args[2:], " ")})
-		if err != nil {
-			fatal(err)
-		}
-		if !resp.OK {
-			fatal(errors.New(resp.Error))
-		}
-		printJSON(resp)
+		callAndPrint(cfg, dictation.Command{Action: "history", Query: strings.Join(os.Args[2:], " ")})
 	case "delete-history":
 		if len(os.Args) != 3 {
 			fatal(errors.New("usage: dictationd delete-history JOB_ID"))
 		}
-		callOK(cfg, dictation.Command{Action: "delete-history", JobID: os.Args[2]})
+		callAndPrint(cfg, dictation.Command{Action: "delete-history", JobID: os.Args[2]})
 	case "vocabulary":
-		resp, err := call(cfg, dictation.Command{Action: "vocabulary"})
-		if err != nil {
-			fatal(err)
-		}
-		if !resp.OK {
-			fatal(errors.New(resp.Error))
-		}
-		printJSON(resp)
+		callAndPrint(cfg, dictation.Command{Action: "vocabulary"})
 	case "vocabulary-add":
 		if len(os.Args) != 4 {
 			fatal(errors.New("usage: dictationd vocabulary-add HEARD_TEXT REPLACEMENT"))
 		}
-		callOK(cfg, dictation.Command{Action: "vocabulary-add", Heard: os.Args[2], Replacement: os.Args[3]})
+		callAndPrint(cfg, dictation.Command{Action: "vocabulary-add", Heard: os.Args[2], Replacement: os.Args[3]})
 	case "vocabulary-delete":
 		if len(os.Args) != 3 {
 			fatal(errors.New("usage: dictationd vocabulary-delete ENTRY_ID"))
 		}
-		callOK(cfg, dictation.Command{Action: "vocabulary-delete", JobID: os.Args[2]})
+		callAndPrint(cfg, dictation.Command{Action: "vocabulary-delete", JobID: os.Args[2]})
 	case "library":
 		openLibrary(cfg)
 	case "retry":
 		if len(os.Args) != 3 {
 			fatal(errors.New("usage: dictationd retry JOB_ID"))
 		}
-		resp, err := call(cfg, dictation.Command{Action: "retry", JobID: os.Args[2]})
-		if err != nil {
-			fatal(err)
-		}
-		if !resp.OK {
-			fatal(errors.New(resp.Error))
-		}
-		printJSON(resp)
+		callAndPrint(cfg, dictation.Command{Action: "retry", JobID: os.Args[2]})
 	case "config-path":
 		fmt.Println(dictation.ConfigPath())
 	case "credentials-path":
@@ -117,7 +89,7 @@ func main() {
 	}
 }
 
-func callOK(cfg dictation.Config, cmd dictation.Command) {
+func callAndPrint(cfg dictation.Config, cmd dictation.Command) {
 	resp, err := call(cfg, cmd)
 	if err != nil {
 		fatal(err)
@@ -135,7 +107,7 @@ func openLibrary(cfg dictation.Config) {
 	// --no-duplicate makes repeated launcher/keybind presses harmless. The UI is
 	// independent of the recorder service, so closing it cannot affect an active
 	// dictation.
-	cmd := exec.Command("qs", "--no-duplicate", "-p", cfg.LibraryUIPath())
+	cmd := exec.CommandContext(context.Background(), "qs", "--no-duplicate", "-p", cfg.LibraryUIPath())
 	if err := cmd.Start(); err != nil {
 		fatal(fmt.Errorf("open JFlow Library: %w", err))
 	}

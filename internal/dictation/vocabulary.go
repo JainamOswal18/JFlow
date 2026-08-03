@@ -5,11 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // VocabularyStore keeps personal corrections in one small local JSON file.
@@ -20,10 +21,12 @@ type VocabularyStore struct {
 	mu   sync.Mutex
 }
 
+// NewVocabularyStore creates a local store at path.
 func NewVocabularyStore(path string) *VocabularyStore {
 	return &VocabularyStore{path: path}
 }
 
+// List returns all entries in a stable, human-friendly order.
 func (s *VocabularyStore) List() ([]VocabularyEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -48,6 +51,7 @@ func (s *VocabularyStore) listLocked() ([]VocabularyEntry, error) {
 	return entries, nil
 }
 
+// Add stores one case-insensitive heard-as correction.
 func (s *VocabularyStore) Add(heard, replacement string) (VocabularyEntry, error) {
 	heard = strings.TrimSpace(heard)
 	replacement = strings.TrimSpace(replacement)
@@ -78,6 +82,7 @@ func (s *VocabularyStore) Add(heard, replacement string) (VocabularyEntry, error
 	return entry, nil
 }
 
+// Delete removes one vocabulary entry by its local identifier.
 func (s *VocabularyStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -124,11 +129,58 @@ func (s *VocabularyStore) Apply(text string) string {
 	}
 	sort.SliceStable(entries, func(i, j int) bool { return len(entries[i].Heard) > len(entries[j].Heard) })
 	for _, entry := range entries {
-		pattern := regexp.MustCompile(`(?i)(^|[^[:alnum:]_])(` + regexp.QuoteMeta(entry.Heard) + `)($|[^[:alnum:]_])`)
-		text = pattern.ReplaceAllStringFunc(text, func(match string) string {
-			parts := pattern.FindStringSubmatch(match)
-			return parts[1] + entry.Replacement + parts[3]
-		})
+		text = replaceWholePhrase(text, entry.Heard, entry.Replacement)
 	}
 	return text
+}
+
+func replaceWholePhrase(text, heard, replacement string) string {
+	foldedText := strings.ToLower(text)
+	foldedHeard := strings.ToLower(heard)
+	if foldedHeard == "" {
+		return text
+	}
+	var out strings.Builder
+	searchFrom, copiedThrough := 0, 0
+	for searchFrom < len(foldedText) {
+		next := strings.Index(foldedText[searchFrom:], foldedHeard)
+		if next < 0 {
+			break
+		}
+		start := searchFrom + next
+		end := start + len(foldedHeard)
+		if isWordBoundaryBefore(text, start) && isWordBoundaryAfter(text, end) {
+			out.WriteString(text[copiedThrough:start])
+			out.WriteString(replacement)
+			copiedThrough = end
+		}
+		// Advance past the candidate so repeated phrases separated by one space
+		// or punctuation remain independently eligible for replacement.
+		searchFrom = end
+	}
+	if copiedThrough == 0 {
+		return text
+	}
+	out.WriteString(text[copiedThrough:])
+	return out.String()
+}
+
+func isWordBoundaryBefore(text string, index int) bool {
+	if index == 0 {
+		return true
+	}
+	r, _ := utf8.DecodeLastRuneInString(text[:index])
+	return !isWordRune(r)
+}
+
+func isWordBoundaryAfter(text string, index int) bool {
+	if index == len(text) {
+		return true
+	}
+	r, _ := utf8.DecodeRuneInString(text[index:])
+	return !isWordRune(r)
+}
+
+func isWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsNumber(r)
 }

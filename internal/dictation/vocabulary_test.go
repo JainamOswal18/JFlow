@@ -13,8 +13,11 @@ func TestVocabularyApplyUsesWholePhrases(t *testing.T) {
 	if _, err := s.Add("hyper land", "Hyprland"); err != nil {
 		t.Fatal(err)
 	}
-	got := s.Apply("Open J flow, then hyper land. workflow should stay unchanged.")
-	want := "Open JFlow, then Hyprland. workflow should stay unchanged."
+	if _, err := s.Add("c plus plus", "C++"); err != nil {
+		t.Fatal(err)
+	}
+	got := s.Apply("Open J flow, then hyper land. hyper land hyper land. c plus plus is not c plus pluser. workflow should stay unchanged.")
+	want := "Open JFlow, then Hyprland. Hyprland Hyprland. C++ is not c plus pluser. workflow should stay unchanged."
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

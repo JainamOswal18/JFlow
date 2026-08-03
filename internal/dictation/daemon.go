@@ -23,6 +23,7 @@ type Daemon struct {
 	cfg              Config
 	store            *Store
 	vocabulary       *VocabularyStore
+	lifecycleMu      sync.Mutex
 	mu               sync.Mutex
 	recording        *recording
 	processingID     string
@@ -407,6 +408,8 @@ func (d *Daemon) CancelIfRecording() error {
 	return nil
 }
 func (d *Daemon) Retry(id string) error {
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
 	if d.isRecording() {
 		return errors.New("cannot retry while dictating")
 	}
@@ -471,6 +474,8 @@ func (d *Daemon) DeleteHistory(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return errors.New("job ID is required")
 	}
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
 	d.mu.Lock()
 	busy := (d.recording != nil && d.recording.jobID == id) || d.processingID == id
 	d.mu.Unlock()
@@ -522,19 +527,23 @@ func (d *Daemon) worker(ctx context.Context) {
 	for {
 		select {
 		case id := <-d.work:
+			d.lifecycleMu.Lock()
 			jobCtx, cancel := context.WithCancel(ctx)
 			d.mu.Lock()
 			d.processingID = id
 			d.processingCancel = cancel
 			d.mu.Unlock()
+			d.lifecycleMu.Unlock()
 			d.process(jobCtx, id)
 			cancel()
+			d.lifecycleMu.Lock()
 			d.mu.Lock()
 			if d.processingID == id {
 				d.processingID = ""
 				d.processingCancel = nil
 			}
 			d.mu.Unlock()
+			d.lifecycleMu.Unlock()
 		case <-ctx.Done():
 			return
 		}
