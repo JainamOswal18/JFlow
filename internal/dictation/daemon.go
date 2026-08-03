@@ -246,13 +246,34 @@ func (d *Daemon) Stop() error {
 	d.setStatusLocked("processing", "Finalizing audio")
 	d.mu.Unlock()
 	if err := r.cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return err
+		// The recording has already been detached from the active state. Make a
+		// best effort to terminate its child process rather than leave the UI in
+		// Listening/Finalizing forever.
+		_ = r.cmd.Process.Kill()
 	}
 	// pw-record exits with status 1 on SIGINT on this PipeWire build. We sent
 	// that signal deliberately to finalize the recording, so the WAV/pipe result
 	// (not the process exit code) determines whether capture succeeded.
-	_ = r.cmd.Wait()
-	pipeErr := <-r.done
+	waitDone := make(chan struct{}, 1)
+	go func() {
+		_ = r.cmd.Wait()
+		waitDone <- struct{}{}
+	}()
+	select {
+	case <-waitDone:
+	case <-time.After(2 * time.Second):
+		_ = r.cmd.Process.Kill()
+		select {
+		case <-waitDone:
+		case <-time.After(1 * time.Second):
+		}
+	}
+	var pipeErr error
+	select {
+	case pipeErr = <-r.done:
+	case <-time.After(2 * time.Second):
+		pipeErr = errors.New("microphone capture did not close within 2 seconds")
+	}
 	if err := r.wav.Close(); err != nil {
 		pipeErr = err
 	}
@@ -504,7 +525,9 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		job.Status = StatusTranscribing
 		_ = d.store.Save(job)
 		d.setStatus("processing", "Transcribing")
-		pctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		// Short-form dictation should not sit in Transcribing for a minute.
+		// A timed-out request is preserved locally and gets one quick retry.
+		pctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 		text, err := ProviderFor(d.cfg).Transcribe(pctx, job.AudioPath, d.cfg)
 		cancel()
 		if err != nil {

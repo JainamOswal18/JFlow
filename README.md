@@ -76,9 +76,9 @@ It restarts only `dictationd.service` and `dictationd-ui.service` after a
 completed suspend or hibernate; it does not run before sleep or alter power
 settings.
 
-Transient transcription failures retry automatically after 3, 6, and 12
-seconds. The bottom-center indicator shows `Retrying 1/4` (and so on); only
-non-retryable errors such as invalid credentials require attention.
+Transient transcription failures retry automatically once after three seconds.
+If both attempts fail, the local recording is retained for manual retry; the
+bottom-center indicator shows `Retrying 1/2` while that retry runs.
 
 ## Providers
 

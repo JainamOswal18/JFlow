@@ -73,7 +73,9 @@ func DefaultConfig() Config {
 		// This source already exists on this machine and is the EasyEffects input
 		// chain (RNNoise/VAD). Set it to "" to use PipeWire's default source.
 		MicTarget: "easyeffects_source", SampleRate: 16000, SafeInsertion: true, FailedRetention: 14, HistoryRetention: 30,
-		Retry: RetryConfig{MaxAttempts: 4, InitialSecs: 3, MaxSecs: 120},
+		// One automatic retry keeps brief network failures invisible without
+		// allowing a stalled cloud provider to hold up dictation indefinitely.
+		Retry: RetryConfig{MaxAttempts: 2, InitialSecs: 3, MaxSecs: 120},
 		// The release-only flow keeps the hotkey path local and instant: no network
 		// call can leave microphone capture stuck while the key is held.
 		ASR:     ASRConfig{Provider: "elevenlabs_batch", APIKeyEnv: "ELEVENLABS_API_KEY", Language: "eng", Secondary: []string{"hin"}, NoVerbatim: true, Model: "scribe_v2", Endpoint: "https://api.elevenlabs.io/v1/speech-to-text"},
@@ -105,7 +107,7 @@ func LoadConfig(path string) (Config, error) {
 		cfg.SampleRate = 16000
 	}
 	if cfg.Retry.MaxAttempts <= 0 {
-		cfg.Retry.MaxAttempts = 4
+		cfg.Retry.MaxAttempts = 2
 	}
 	if cfg.Retry.InitialSecs <= 0 {
 		cfg.Retry.InitialSecs = 3
