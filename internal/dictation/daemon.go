@@ -529,15 +529,20 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	// field. wtype can therefore succeed even when the application discards the
 	// text. Put every completed dictation on the clipboard first, so paste is a
 	// reliable recovery path regardless of where it was dictated.
-	job.ClipboardBackup = copyClipboard(job.FinalText) == nil
+	clipboardErr := copyClipboard(job.FinalText)
+	job.ClipboardBackup = clipboardErr == nil
 	job.DeliveryAttempted = true
 	_ = d.store.Save(job)
 	if err := d.deliver(job); err != nil {
 		job.Status = StatusFailed
-		job.ClipboardBackup = true
-		job.Error = "Copied to clipboard: " + err.Error()
+		if job.ClipboardBackup {
+			job.Error = "Copied to clipboard: " + err.Error()
+			notify("Dictation ready", "Text was copied to the clipboard. Click a field and paste it.")
+		} else {
+			job.Error = fmt.Sprintf("Text could not be inserted or copied: %v (clipboard: %v)", err, clipboardErr)
+			notify("Dictation delivery failed", "Text could not be inserted or copied. The transcript is retained in JFlow history.")
+		}
 		_ = d.store.Save(job)
-		notify("Dictation ready", "Text was copied to the clipboard. Click a field and paste it.")
 		d.setStatus("idle", "Ready")
 		return
 	}
@@ -627,9 +632,13 @@ func activeWindow() WindowTarget {
 	return WindowTarget{Address: out.Address, Class: out.Class, Title: out.Title}
 }
 func copyClipboard(text string) error {
-	cmd := exec.Command("wl-copy")
+	cmd := exec.Command("wl-copy", "--type", "text/plain;charset=utf-8")
 	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("wl-copy: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 func notify(title, body string) {
 	_ = exec.Command("notify-send", "--app-name=dictationd", title, body).Run()
