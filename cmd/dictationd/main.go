@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/JainamOswal18/JFlow/internal/dictation"
 )
@@ -105,15 +104,14 @@ func openLibrary(cfg dictation.Config) {
 	if _, err := os.Stat(cfg.LibraryUIPath()); err != nil {
 		fatal(fmt.Errorf("JFlow Library UI is unavailable: %w", err))
 	}
-	// With Hyprland's Lua dispatcher an existing normal window must be focused
-	// explicitly; qs --no-duplicate alone intentionally exits without raising it.
-	focusCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	_ = exec.CommandContext(focusCtx, "/usr/bin/hyprctl", "dispatch", `hl.dsp.focus({ window = "title:^JFlow$" })`).Run()
-	cancel()
 	// --no-duplicate makes repeated launcher/keybind presses harmless. The UI is
 	// independent of the recorder service, so closing it cannot affect an active
 	// dictation.
 	cmd := exec.CommandContext(context.Background(), "/usr/bin/qs", "--no-duplicate", "-p", cfg.LibraryUIPath())
+	// The Library must outlive the short launcher command. A separate session
+	// also prevents terminal, desktop-entry, or hotkey wrappers from closing the
+	// window when they exit.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		fatal(fmt.Errorf("open JFlow Library: %w", err))
 	}
