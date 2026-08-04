@@ -2,7 +2,7 @@
 Type=Application
 Name=JFlow
 Comment=Local dictation history and vocabulary
-Exec=dictationd library
+Exec=/bin/sh -c "exec ~/.local/bin/dictationd library"
 Terminal=false
 Categories=Utility;Office;
 Keywords=dictation;voice;transcription;history;vocabulary;

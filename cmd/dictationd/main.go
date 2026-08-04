@@ -107,7 +107,7 @@ func openLibrary(cfg dictation.Config) {
 	// --no-duplicate makes repeated launcher/keybind presses harmless. The UI is
 	// independent of the recorder service, so closing it cannot affect an active
 	// dictation.
-	cmd := exec.CommandContext(context.Background(), "qs", "--no-duplicate", "-p", cfg.LibraryUIPath())
+	cmd := exec.CommandContext(context.Background(), "/usr/bin/qs", "--no-duplicate", "-p", cfg.LibraryUIPath())
 	if err := cmd.Start(); err != nil {
 		fatal(fmt.Errorf("open JFlow Library: %w", err))
 	}

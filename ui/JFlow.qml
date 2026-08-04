@@ -8,6 +8,7 @@ import Quickshell.Io
 FloatingWindow {
     id: root
     title: "JFlow"
+    visible: true
     implicitWidth: 920
     implicitHeight: 650
     minimumSize.width: 680
