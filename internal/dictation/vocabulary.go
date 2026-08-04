@@ -45,18 +45,38 @@ func (s *VocabularyStore) listLocked() ([]VocabularyEntry, error) {
 	if err := json.Unmarshal(b, &entries); err != nil {
 		return nil, err
 	}
+	for i := range entries {
+		normalizeVocabularyEntry(&entries[i])
+	}
 	sort.Slice(entries, func(i, j int) bool {
-		return strings.ToLower(entries[i].Heard) < strings.ToLower(entries[j].Heard)
+		return strings.ToLower(entries[i].Canonical) < strings.ToLower(entries[j].Canonical)
 	})
 	return entries, nil
 }
 
-// Add stores one case-insensitive heard-as correction.
+// Add keeps the old heard-as API working while storing the replacement as the
+// canonical term and the heard text as a local alias.
 func (s *VocabularyStore) Add(heard, replacement string) (VocabularyEntry, error) {
 	heard = strings.TrimSpace(heard)
 	replacement = strings.TrimSpace(replacement)
 	if heard == "" || replacement == "" {
 		return VocabularyEntry{}, errors.New("both heard text and replacement are required")
+	}
+	return s.addCanonical(replacement, heard)
+}
+
+// AddCanonical stores a word or phrase exactly as the user wants it written.
+// It is later used both as an exact local case correction and as a Scribe
+// keyterm. The user never needs to provide a guessed mis-transcription.
+func (s *VocabularyStore) AddCanonical(canonical string) (VocabularyEntry, error) {
+	return s.addCanonical(canonical, "")
+}
+
+func (s *VocabularyStore) addCanonical(canonical, alias string) (VocabularyEntry, error) {
+	canonical = strings.TrimSpace(canonical)
+	alias = strings.TrimSpace(alias)
+	if canonical == "" {
+		return VocabularyEntry{}, errors.New("a word or phrase is required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -64,9 +84,15 @@ func (s *VocabularyStore) Add(heard, replacement string) (VocabularyEntry, error
 	if err != nil {
 		return VocabularyEntry{}, err
 	}
-	for _, entry := range entries {
-		if strings.EqualFold(entry.Heard, heard) {
-			return VocabularyEntry{}, errors.New("a correction for that heard text already exists")
+	for i := range entries {
+		if strings.EqualFold(entries[i].Canonical, canonical) {
+			if addAlias(&entries[i], alias) {
+				entries[i].UpdatedAt = time.Now().UTC()
+				if err := s.saveLocked(entries); err != nil {
+					return VocabularyEntry{}, err
+				}
+			}
+			return entries[i], nil
 		}
 	}
 	id, err := newID()
@@ -74,12 +100,51 @@ func (s *VocabularyStore) Add(heard, replacement string) (VocabularyEntry, error
 		return VocabularyEntry{}, err
 	}
 	now := time.Now().UTC()
-	entry := VocabularyEntry{ID: id, Heard: heard, Replacement: replacement, CreatedAt: now, UpdatedAt: now}
+	entry := VocabularyEntry{ID: id, Canonical: canonical, CreatedAt: now, UpdatedAt: now}
+	addAlias(&entry, alias)
 	entries = append(entries, entry)
 	if err := s.saveLocked(entries); err != nil {
 		return VocabularyEntry{}, err
 	}
 	return entry, nil
+}
+
+// LearnAlias records a correction observed in a transcript. It is local-only:
+// the alias is never sent as a cloud keyterm.
+func (s *VocabularyStore) LearnAlias(canonical, alias string) (VocabularyEntry, error) {
+	canonical = strings.TrimSpace(canonical)
+	alias = strings.TrimSpace(alias)
+	if canonical == "" || alias == "" || strings.EqualFold(canonical, alias) {
+		return VocabularyEntry{}, nil
+	}
+	return s.addCanonical(canonical, alias)
+}
+
+// Keyterms returns canonical terms suitable for Scribe. Aliases are excluded
+// deliberately: they are personal local history, while cloud prompting should
+// receive only the spelling the user actually wants.
+func (s *VocabularyStore) Keyterms(limit int) ([]string, error) {
+	entries, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	terms := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		term := strings.TrimSpace(entry.Canonical)
+		if term == "" || len([]rune(term)) >= 50 || len(strings.Fields(term)) > 5 {
+			continue
+		}
+		key := strings.ToLower(term)
+		if !seen[key] {
+			seen[key] = true
+			terms = append(terms, term)
+		}
+		if limit > 0 && len(terms) >= limit {
+			break
+		}
+	}
+	return terms, nil
 }
 
 // Delete removes one vocabulary entry by its local identifier.
@@ -109,6 +174,11 @@ func (s *VocabularyStore) saveLocked(entries []VocabularyEntry) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
 		return err
 	}
+	for i := range entries {
+		normalizeVocabularyEntry(&entries[i])
+		entries[i].Heard = ""
+		entries[i].Replacement = ""
+	}
 	b, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return err
@@ -120,18 +190,179 @@ func (s *VocabularyStore) saveLocked(entries []VocabularyEntry) error {
 	return os.Rename(tmp, s.path)
 }
 
-// Apply replaces whole words or phrases, case-insensitively. Longest entries
-// run first, which makes "JFlow app" win over a shorter "JFlow" entry.
+// Apply replaces canonical casing and learned aliases, case-insensitively.
+// Longest phrases run first, which makes a full name win over a short name.
 func (s *VocabularyStore) Apply(text string) string {
 	entries, err := s.List()
 	if err != nil || strings.TrimSpace(text) == "" {
 		return text
 	}
-	sort.SliceStable(entries, func(i, j int) bool { return len(entries[i].Heard) > len(entries[j].Heard) })
+	type correction struct{ heard, canonical string }
+	corrections := make([]correction, 0, len(entries)*2)
 	for _, entry := range entries {
-		text = replaceWholePhrase(text, entry.Heard, entry.Replacement)
+		if entry.Canonical == "" {
+			continue
+		}
+		corrections = append(corrections, correction{entry.Canonical, entry.Canonical})
+		for _, alias := range entry.Aliases {
+			corrections = append(corrections, correction{alias, entry.Canonical})
+		}
+	}
+	sort.SliceStable(corrections, func(i, j int) bool { return len(corrections[i].heard) > len(corrections[j].heard) })
+	for _, correction := range corrections {
+		text = replaceWholePhrase(text, correction.heard, correction.canonical)
 	}
 	return text
+}
+
+func normalizeVocabularyEntry(entry *VocabularyEntry) {
+	entry.Canonical = strings.TrimSpace(entry.Canonical)
+	if entry.Canonical == "" {
+		entry.Canonical = strings.TrimSpace(entry.Replacement)
+	}
+	if entry.Canonical == "" {
+		entry.Canonical = strings.TrimSpace(entry.Heard)
+	}
+	aliases := make([]string, 0, len(entry.Aliases)+1)
+	for _, alias := range append(entry.Aliases, entry.Heard) {
+		alias = strings.TrimSpace(alias)
+		if alias == "" || strings.EqualFold(alias, entry.Canonical) {
+			continue
+		}
+		duplicate := false
+		for _, existing := range aliases {
+			if strings.EqualFold(existing, alias) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			aliases = append(aliases, alias)
+		}
+	}
+	entry.Aliases = aliases
+}
+
+func addAlias(entry *VocabularyEntry, alias string) bool {
+	alias = strings.TrimSpace(alias)
+	if alias == "" || strings.EqualFold(alias, entry.Canonical) {
+		return false
+	}
+	for _, existing := range entry.Aliases {
+		if strings.EqualFold(existing, alias) {
+			return false
+		}
+	}
+	entry.Aliases = append(entry.Aliases, alias)
+	return true
+}
+
+// LearnFromCorrection extracts high-similarity changed phrases from a user's
+// saved transcript edit. It deliberately learns only close spelling/spacing
+// variants ("Jay Nam" -> "Jainam"), not semantic rewrites of a sentence.
+func (s *VocabularyStore) LearnFromCorrection(raw, corrected string) (int, error) {
+	rawWords := strings.Fields(raw)
+	correctedWords := strings.Fields(corrected)
+	if len(rawWords) == 0 || len(correctedWords) == 0 {
+		return 0, nil
+	}
+	type candidate struct {
+		alias string
+		score float64
+	}
+	best := map[string]candidate{}
+	for length := 1; length <= 3; length++ {
+		for start := 0; start+length <= len(correctedWords); start++ {
+			canonical := strings.Join(correctedWords[start:start+length], " ")
+			foldedCanonical := compactVocabularyText(canonical)
+			if len([]rune(foldedCanonical)) < 4 || containsWholePhrase(raw, canonical) {
+				continue
+			}
+			for rawLength := 1; rawLength <= 3; rawLength++ {
+				for rawStart := 0; rawStart+rawLength <= len(rawWords); rawStart++ {
+					alias := strings.Join(rawWords[rawStart:rawStart+rawLength], " ")
+					foldedAlias := compactVocabularyText(alias)
+					if foldedAlias == "" || foldedAlias == foldedCanonical {
+						continue
+					}
+					score := similarity(foldedCanonical, foldedAlias)
+					if score < 0.80 {
+						continue
+					}
+					current, exists := best[foldedCanonical]
+					if !exists || score > current.score || (score == current.score && len(alias) < len(current.alias)) {
+						best[foldedCanonical] = candidate{alias: alias, score: score}
+					}
+				}
+			}
+		}
+	}
+	learned := 0
+	for length := 1; length <= 3; length++ {
+		for start := 0; start+length <= len(correctedWords); start++ {
+			canonical := strings.Join(correctedWords[start:start+length], " ")
+			if candidate, ok := best[compactVocabularyText(canonical)]; ok {
+				if _, err := s.LearnAlias(canonical, candidate.alias); err != nil {
+					return learned, err
+				}
+				learned++
+			}
+		}
+	}
+	return learned, nil
+}
+
+func containsWholePhrase(text, phrase string) bool {
+	return strings.Contains(" "+compactVocabularyText(text)+" ", " "+compactVocabularyText(phrase)+" ")
+}
+
+func compactVocabularyText(text string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func similarity(a, b string) float64 {
+	ar := []rune(a)
+	br := []rune(b)
+	if len(ar) == 0 || len(br) == 0 {
+		return 0
+	}
+	prev := make([]int, len(br)+1)
+	current := make([]int, len(br)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i, r := range ar {
+		current[0] = i + 1
+		for j, other := range br {
+			cost := 0
+			if r != other {
+				cost = 1
+			}
+			current[j+1] = minInt(current[j]+1, prev[j+1]+1, prev[j]+cost)
+		}
+		prev, current = current, prev
+	}
+	maxLen := len(ar)
+	if len(br) > maxLen {
+		maxLen = len(br)
+	}
+	return 1 - float64(prev[len(br)])/float64(maxLen)
+}
+
+func minInt(values ...int) int {
+	min := values[0]
+	for _, value := range values[1:] {
+		if value < min {
+			min = value
+		}
+	}
+	return min
 }
 
 func replaceWholePhrase(text, heard, replacement string) string {

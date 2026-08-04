@@ -31,8 +31,8 @@ dictation.
 - A separate Quickshell **JFlow Library** desktop window, opened on demand. It
   searches history and manages local vocabulary without making the recording
   overlay larger or permanently consuming desktop resources.
-- Atomic local vocabulary corrections applied after ASR and before insertion.
-  This avoids ElevenLabs' paid keyterm feature for ordinary names and terms.
+- Canonical vocabulary terms are sent to Scribe v2 as keyterms, while locally
+  learned aliases are applied after ASR and never leave the device.
 - Hyprland hold/release binding for `Super+R` and a recovery binding on
   `Super+Shift+V`.
 - User-level systemd units for the daemon and indicator.
@@ -113,9 +113,12 @@ directly. Active jobs cannot be deleted.
 
 Vocabulary is a small JSON array in `~/.config/dictationd/vocabulary.json`.
 Writes use a same-directory temporary file followed by rename, with mode 0600.
-Each `heard as → write as` rule is applied as a case-insensitive whole word or
-phrase after transcription (and optional cleanup), before the final text is
-saved, copied, and inserted. Longer phrases are applied first.
+Each entry has a canonical spelling selected by the user. Canonical terms are
+included in Scribe v2 keyterm prompting (up to 100, avoiding Scribe's larger
+vocabulary minimum-duration tier); only learned aliases are matched locally as
+case-insensitive whole phrases after transcription and before insertion.
+Editing a saved transcript in History compares close spelling/spacing variants
+and adds local aliases such as `Jay Nam Oswal → Jainam Oswal`.
 
 ## First-use steps
 
@@ -200,8 +203,9 @@ in the credential file during implementation.
    Indian-accent sentences with names, technical terms, occasional Hinglish,
    corrections, and noisy-room samples. Choose one primary provider rather
    than chaining ASR systems.
-3. Add frequent names, project terms, and commands through the local Library
-   vocabulary rather than paid cloud keyterms.
+3. Add only frequent names, project terms, and commands through the Library.
+   They become paid Scribe keyterms; aliases learned from corrections remain
+   local and cost nothing extra.
 4. Decide whether cleanup is needed after testing Scribe's `no_verbatim` mode.
    If enabled, test it carefully with technical text and code-related speech.
 5. Phase 3 can add optional per-app profiles and hands-free mode.

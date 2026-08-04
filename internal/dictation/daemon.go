@@ -94,6 +94,7 @@ type Command struct {
 	Query       string `json:"query,omitempty"`
 	Heard       string `json:"heard,omitempty"`
 	Replacement string `json:"replacement,omitempty"`
+	Text        string `json:"text,omitempty"`
 }
 type Response struct {
 	OK         bool              `json:"ok"`
@@ -160,10 +161,12 @@ func (d *Daemon) handleConnection(c net.Conn) {
 			resp.Jobs, err = d.store.Search(cmd.Query)
 		case "delete-history":
 			err = d.DeleteHistory(cmd.JobID)
+		case "correct-history":
+			err = d.CorrectHistory(cmd.JobID, cmd.Text)
 		case "vocabulary":
 			resp.Vocabulary, err = d.vocabulary.List()
 		case "vocabulary-add":
-			_, err = d.vocabulary.Add(cmd.Heard, cmd.Replacement)
+			_, err = d.vocabulary.AddCanonical(cmd.Text)
 			if err == nil {
 				resp.Vocabulary, err = d.vocabulary.List()
 			}
@@ -485,6 +488,37 @@ func (d *Daemon) DeleteHistory(id string) error {
 	return d.store.Delete(id)
 }
 
+// CorrectHistory saves a user-edited transcript and learns only close spelling
+// or spacing aliases from the before/after text. The learning is local; only
+// canonical vocabulary terms are ever sent to Scribe on future requests.
+func (d *Daemon) CorrectHistory(id, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return errors.New("corrected text is required")
+	}
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
+	d.mu.Lock()
+	busy := (d.recording != nil && d.recording.jobID == id) || d.processingID == id
+	d.mu.Unlock()
+	if busy {
+		return errors.New("cannot correct an active dictation")
+	}
+	job, err := d.store.Get(id)
+	if err != nil {
+		return err
+	}
+	before := job.FinalText
+	if strings.TrimSpace(before) == "" {
+		before = job.Transcript
+	}
+	if _, err := d.vocabulary.LearnFromCorrection(before, text); err != nil {
+		return err
+	}
+	job.FinalText = text
+	return d.store.Save(job)
+}
+
 func (d *Daemon) CopyLast() error {
 	jobs, err := d.store.List()
 	if err != nil {
@@ -655,7 +689,13 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		// Short-form dictation should not sit in Transcribing for a minute.
 		// A timed-out request is preserved locally and gets one quick retry.
 		pctx, cancel := context.WithTimeout(ctx, 25*time.Second)
-		text, err := ProviderFor(d.cfg).Transcribe(pctx, job.AudioPath, d.cfg)
+		requestCfg := d.cfg
+		// Canonical vocabulary terms bias Scribe toward the spelling the user
+		// chose. Learned aliases stay local and are never sent to ElevenLabs.
+		if keyterms, keytermErr := d.vocabulary.Keyterms(100); keytermErr == nil {
+			requestCfg.ASR.Keyterms = mergeKeyterms(requestCfg.ASR.Keyterms, keyterms, 100)
+		}
+		text, err := ProviderFor(requestCfg).Transcribe(pctx, job.AudioPath, requestCfg)
 		cancel()
 		if d.cancelledProcessing(ctx, job) {
 			return
@@ -1008,6 +1048,24 @@ func encodeBase64(b []byte) string {
 		}
 	}
 	return string(out)
+}
+
+func mergeKeyterms(existing, vocabulary []string, limit int) []string {
+	seen := make(map[string]bool, len(existing)+len(vocabulary))
+	merged := make([]string, 0, len(existing)+len(vocabulary))
+	for _, term := range append(existing, vocabulary...) {
+		term = strings.TrimSpace(term)
+		key := strings.ToLower(term)
+		if term == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		merged = append(merged, term)
+		if limit > 0 && len(merged) >= limit {
+			break
+		}
+	}
+	return merged
 }
 
 // Keep syscall imported on older Go releases where interrupted pw-record exits

@@ -77,11 +77,15 @@ closing it can never interrupt an active dictation. The Library lets you:
 
 - Search local history by text, source app, status, or error.
 - Copy a specific transcript, retry a failed recording, or delete an item.
-- Add local `heard as → write as` vocabulary corrections.
+- Add a canonical name or term once; JFlow sends that spelling to Scribe as a
+  keyterm and learns local aliases from History corrections.
 
-Corrections are applied after transcription and before insertion. They use no
-ElevenLabs keyterms, incur no cloud surcharge, and are matched as complete
-words or phrases (case-insensitively). For example, `hyper land → Hyprland`.
+Canonical vocabulary terms are sent to ElevenLabs Scribe v2 as keyterms, which
+adds ElevenLabs' keyterm surcharge to transcription requests. Learned aliases
+stay in `~/.config/dictationd/vocabulary.json`, are applied locally after
+transcription, and are never sent to ElevenLabs. Correct a saved History item
+to let JFlow learn close spelling or spacing variants such as
+`Jay Nam Oswal → Jainam Oswal`.
 
 The optional `Super+Shift+H` binding in
 `integrations/hypr/keybinds.lua` opens the Library directly.

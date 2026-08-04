@@ -39,15 +39,20 @@ type Job struct {
 	ClipboardBackup   bool         `json:"clipboard_backup"`
 }
 
-// VocabularyEntry is a local, post-transcription correction. It deliberately
-// lives outside the cloud ASR keyterms feature so common names and technical
-// words can be corrected without sending extra data or paying a keyterm fee.
+// VocabularyEntry is a user-owned canonical word or phrase. Canonical terms
+// are sent to Scribe as keyterms; aliases are learned locally from corrections
+// and never leave the machine.
 type VocabularyEntry struct {
-	ID          string    `json:"id"`
-	Heard       string    `json:"heard"`
-	Replacement string    `json:"replacement"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	Canonical string    `json:"canonical,omitempty"`
+	Aliases   []string  `json:"aliases,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Legacy fields are read so existing heard-as entries migrate safely on
+	// their next update. New entries never write them.
+	Heard       string `json:"heard,omitempty"`
+	Replacement string `json:"replacement,omitempty"`
 }
 
 type Status struct {

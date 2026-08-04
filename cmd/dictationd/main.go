@@ -64,10 +64,10 @@ func main() {
 	case "vocabulary":
 		callAndPrint(cfg, dictation.Command{Action: "vocabulary"})
 	case "vocabulary-add":
-		if len(os.Args) != 4 {
-			fatal(errors.New("usage: dictationd vocabulary-add HEARD_TEXT REPLACEMENT"))
+		if len(os.Args) != 3 {
+			fatal(errors.New("usage: dictationd vocabulary-add WORD_OR_PHRASE"))
 		}
-		callAndPrint(cfg, dictation.Command{Action: "vocabulary-add", Heard: os.Args[2], Replacement: os.Args[3]})
+		callAndPrint(cfg, dictation.Command{Action: "vocabulary-add", Text: os.Args[2]})
 	case "vocabulary-delete":
 		if len(os.Args) != 3 {
 			fatal(errors.New("usage: dictationd vocabulary-delete ENTRY_ID"))
@@ -80,6 +80,11 @@ func main() {
 			fatal(errors.New("usage: dictationd retry JOB_ID"))
 		}
 		callAndPrint(cfg, dictation.Command{Action: "retry", JobID: os.Args[2]})
+	case "correct-history":
+		if len(os.Args) != 4 {
+			fatal(errors.New("usage: dictationd correct-history JOB_ID FINAL_TEXT"))
+		}
+		callAndPrint(cfg, dictation.Command{Action: "correct-history", JobID: os.Args[2], Text: os.Args[3]})
 	case "config-path":
 		fmt.Println(dictation.ConfigPath())
 	case "credentials-path":
@@ -147,5 +152,5 @@ func call(cfg dictation.Config, cmd dictation.Command) (dictation.Response, erro
 func printJSON(v any) { b, _ := json.MarshalIndent(v, "", "  "); fmt.Println(string(b)) }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "dictationd:", err); os.Exit(1) }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|vocabulary|vocabulary-add HEARD_TEXT REPLACEMENT|vocabulary-delete ENTRY_ID|library>")
+	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|correct-history JOB_ID FINAL_TEXT|vocabulary|vocabulary-add WORD_OR_PHRASE|vocabulary-delete ENTRY_ID|library>")
 }

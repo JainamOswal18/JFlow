@@ -49,13 +49,21 @@ FloatingWindow {
     }
 
     function addVocabulary() {
-        var heard = heardInput.text.trim()
-        var replacement = replacementInput.text.trim()
-        if (heard.length === 0 || replacement.length === 0) {
-            feedback = "Enter both fields first"
+        var canonical = vocabularyInput.text.trim()
+        if (canonical.length === 0) {
+            feedback = "Enter a word or phrase first"
             return
         }
-        runAction(daemonCommand(["vocabulary-add", heard, replacement]), "Correction added")
+        runAction(daemonCommand(["vocabulary-add", canonical]), "Added to Scribe vocabulary")
+    }
+
+    function correctHistory(job, text) {
+        var corrected = text.trim()
+        if (corrected.length === 0) {
+            feedback = "Corrected text cannot be empty"
+            return
+        }
+        runAction(daemonCommand(["correct-history", job.id, corrected]), "Saved correction and learned local aliases")
     }
 
     function preview(job) {
@@ -130,8 +138,7 @@ FloatingWindow {
                         return
                     }
                     root.feedback = root.actionMessage
-                    heardInput.text = ""
-                    replacementInput.text = ""
+                    vocabularyInput.text = ""
                     root.refreshHistory()
                     root.refreshVocabulary()
                 } catch (_) { root.feedback = "Action failed" }
@@ -241,7 +248,9 @@ FloatingWindow {
                             clip: true; spacing: 9
                             model: root.jobs
                             delegate: Rectangle {
+                                id: historyCard
                                 required property var modelData
+                                property bool editing: false
                                 width: historyList.width; implicitHeight: content.implicitHeight + 28
                                 radius: 12; color: "#151515"; border.color: "#282828"; border.width: 1
                                 ColumnLayout {
@@ -260,14 +269,30 @@ FloatingWindow {
                                     }
                                     Text {
                                         Layout.fillWidth: true
+                                        visible: !historyCard.editing
                                         text: root.preview(modelData); color: "#f2f2f2"; font.pixelSize: 14
                                         wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
+                                    }
+                                    Rectangle {
+                                        visible: historyCard.editing
+                                        Layout.fillWidth: true; implicitHeight: 64; radius: 8
+                                        color: "#101010"; border.color: "#ffffff"; border.width: 1
+                                        TextEdit {
+                                            id: correctedInput
+                                            anchors.fill: parent; anchors.margins: 10
+                                            color: "#ffffff"; font.pixelSize: 14; wrapMode: TextEdit.Wrap
+                                            selectByMouse: true
+                                            text: root.preview(modelData)
+                                        }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 7
                                         Item { Layout.fillWidth: true }
                                         ActionButton { label: "Copy"; onClicked: root.runAction(root.daemonCommand(["copy", modelData.id]), "Copied to clipboard") }
                                         ActionButton { visible: root.canRetry(modelData); label: "Retry"; onClicked: root.runAction(root.daemonCommand(["retry", modelData.id]), "Retry queued") }
+                                        ActionButton { visible: !historyCard.editing; label: "Correct"; onClicked: historyCard.editing = true }
+                                        ActionButton { visible: historyCard.editing; label: "Cancel"; onClicked: historyCard.editing = false }
+                                        ActionButton { visible: historyCard.editing; label: "Save"; prominent: true; onClicked: { root.correctHistory(modelData, correctedInput.text); historyCard.editing = false } }
                                         ActionButton { label: "Delete"; destructive: true; onClicked: root.runAction(root.daemonCommand(["delete-history", modelData.id]), "Dictation deleted") }
                                     }
                                 }
@@ -288,23 +313,18 @@ FloatingWindow {
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 14
-                        Text { text: "When JFlow hears this"; color: "#9a9a9a"; font.pixelSize: 12 }
+                        Text { text: "Add a name, product, or technical term"; color: "#9a9a9a"; font.pixelSize: 12 }
                         Rectangle {
-                            Layout.fillWidth: true; implicitHeight: 42; radius: 10; color: "#171717"; border.color: heardInput.activeFocus ? "#ffffff" : "#303030"; border.width: 1
-                            TextInput { id: heardInput; anchors.fill: parent; anchors.leftMargin: 15; anchors.rightMargin: 15; verticalAlignment: TextInput.AlignVCenter; color: "#ffffff"; font.pixelSize: 14; onAccepted: root.addVocabulary() }
-                            Text { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 15; visible: heardInput.text.length === 0; text: "e.g. hyper land"; color: "#777777"; font.pixelSize: 14 }
+                            Layout.fillWidth: true; implicitHeight: 42; radius: 10; color: "#171717"; border.color: vocabularyInput.activeFocus ? "#ffffff" : "#303030"; border.width: 1
+                            TextInput { id: vocabularyInput; anchors.fill: parent; anchors.leftMargin: 15; anchors.rightMargin: 15; verticalAlignment: TextInput.AlignVCenter; color: "#ffffff"; font.pixelSize: 14; onAccepted: root.addVocabulary() }
+                            Text { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 15; visible: vocabularyInput.text.length === 0; text: "e.g. Jainam Oswal or Hyprland"; color: "#777777"; font.pixelSize: 14 }
                         }
-                        Text { text: "Write this instead"; color: "#9a9a9a"; font.pixelSize: 12 }
                         RowLayout {
                             Layout.fillWidth: true; spacing: 10
-                            Rectangle {
-                                Layout.fillWidth: true; implicitHeight: 42; radius: 10; color: "#171717"; border.color: replacementInput.activeFocus ? "#ffffff" : "#303030"; border.width: 1
-                                TextInput { id: replacementInput; anchors.fill: parent; anchors.leftMargin: 15; anchors.rightMargin: 15; verticalAlignment: TextInput.AlignVCenter; color: "#ffffff"; font.pixelSize: 14; onAccepted: root.addVocabulary() }
-                                Text { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 15; visible: replacementInput.text.length === 0; text: "e.g. Hyprland"; color: "#777777"; font.pixelSize: 14 }
-                            }
-                            ActionButton { label: "Add correction"; prominent: true; onClicked: root.addVocabulary() }
+                            Item { Layout.fillWidth: true }
+                            ActionButton { label: "Add to Scribe"; prominent: true; onClicked: root.addVocabulary() }
                         }
-                        Text { text: "Corrections run locally after transcription and before insertion."; color: "#737373"; font.pixelSize: 12 }
+                        Text { text: "Scribe receives only this spelling. JFlow learns likely mistakes from History corrections on your device."; color: "#737373"; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#292929" }
                         ListView {
                             id: vocabularyList
@@ -317,8 +337,8 @@ FloatingWindow {
                                     anchors.fill: parent; anchors.margins: 13; spacing: 12
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 3
-                                        Text { text: modelData.heard; color: "#b0b0b0"; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
-                                        Text { text: modelData.replacement; color: "#ffffff"; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: modelData.canonical; color: "#ffffff"; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: (modelData.aliases || []).length + " local learned " + ((modelData.aliases || []).length === 1 ? "alias" : "aliases"); color: "#b0b0b0"; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                     ActionButton { label: "Delete"; destructive: true; onClicked: root.runAction(root.daemonCommand(["vocabulary-delete", modelData.id]), "Correction deleted") }
                                 }
