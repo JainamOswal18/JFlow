@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/JainamOswal18/JFlow/internal/dictation"
 )
@@ -104,10 +105,14 @@ func openLibrary(cfg dictation.Config) {
 	if _, err := os.Stat(cfg.LibraryUIPath()); err != nil {
 		fatal(fmt.Errorf("JFlow Library UI is unavailable: %w", err))
 	}
-	// --no-duplicate makes repeated launcher/keybind presses harmless. The UI is
-	// independent of the recorder service, so closing it cannot affect an active
-	// dictation.
-	cmd := exec.CommandContext(context.Background(), "/usr/bin/qs", "--no-duplicate", "-p", cfg.LibraryUIPath())
+	// Quickshell can retain a process after its FloatingWindow disappears. Its
+	// --no-duplicate mode then exits successfully without showing anything. The
+	// library is independent of recording, so replace only this UI instance
+	// before every open instead of trusting that stale-instance detection.
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	_ = exec.CommandContext(stopCtx, "/usr/bin/qs", "kill", "-p", cfg.LibraryUIPath()).Run()
+	cancel()
+	cmd := exec.CommandContext(context.Background(), "/usr/bin/qs", "-p", cfg.LibraryUIPath())
 	// The Library must outlive the short launcher command. A separate session
 	// also prevents terminal, desktop-entry, or hotkey wrappers from closing the
 	// window when they exit.
