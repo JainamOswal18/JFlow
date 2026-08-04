@@ -209,3 +209,12 @@ in the credential file during implementation.
 4. Decide whether cleanup is needed after testing Scribe's `no_verbatim` mode.
    If enabled, test it carefully with technical text and code-related speech.
 5. Phase 3 can add optional per-app profiles and hands-free mode.
+
+## Future enhancement: learn from an edited selection
+
+Wayland applications do not expose arbitrary in-app text edits to other
+clients. Add an explicit **Learn selection** hotkey instead: after editing a
+JFlow insertion in any application, select the corrected phrase and invoke the
+hotkey. JFlow can compare that user-provided selection with the last raw Scribe
+transcript and update the local alias vocabulary. This avoids opening History
+without silently monitoring other applications or their clipboards.
