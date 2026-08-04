@@ -508,9 +508,9 @@ func (d *Daemon) CorrectHistory(id, text string) error {
 	if err != nil {
 		return err
 	}
-	before := job.FinalText
+	before := job.Transcript
 	if strings.TrimSpace(before) == "" {
-		before = job.Transcript
+		before = job.FinalText
 	}
 	if _, err := d.vocabulary.LearnFromCorrection(before, text); err != nil {
 		return err
