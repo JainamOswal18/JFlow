@@ -22,9 +22,16 @@ FloatingWindow {
     property string feedback: ""
     property string actionMessage: ""
 
+    // Quickshell often starts with a restricted graphical PATH. Use a small
+    // POSIX-shell wrapper so the Library always reaches JFlow's installed
+    // per-user binary without baking a username into this distributed QML.
+    function daemonCommand(args) {
+        return ["/bin/sh", "-c", "exec ~/.local/bin/dictationd \"$@\"", "jflow"].concat(args)
+    }
+
     function refreshHistory() {
         if (historyProc.running) return
-        historyProc.command = search.length > 0 ? ["dictationd", "history", search] : ["dictationd", "history"]
+        historyProc.command = search.length > 0 ? daemonCommand(["history", search]) : daemonCommand(["history"])
         historyProc.running = true
     }
 
@@ -47,7 +54,7 @@ FloatingWindow {
             feedback = "Enter both fields first"
             return
         }
-        runAction(["dictationd", "vocabulary-add", heard, replacement], "Correction added")
+        runAction(daemonCommand(["vocabulary-add", heard, replacement]), "Correction added")
     }
 
     function preview(job) {
@@ -78,7 +85,7 @@ FloatingWindow {
 
     Process {
         id: historyProc
-        command: ["dictationd", "history"]
+        command: root.daemonCommand(["history"])
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -95,7 +102,7 @@ FloatingWindow {
 
     Process {
         id: vocabularyProc
-        command: ["dictationd", "vocabulary"]
+        command: root.daemonCommand(["vocabulary"])
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -255,9 +262,9 @@ FloatingWindow {
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 7
                                         Item { Layout.fillWidth: true }
-                                        ActionButton { label: "Copy"; onClicked: root.runAction(["dictationd", "copy", modelData.id], "Copied to clipboard") }
-                                        ActionButton { visible: root.canRetry(modelData); label: "Retry"; onClicked: root.runAction(["dictationd", "retry", modelData.id], "Retry queued") }
-                                        ActionButton { label: "Delete"; destructive: true; onClicked: root.runAction(["dictationd", "delete-history", modelData.id], "Dictation deleted") }
+                                        ActionButton { label: "Copy"; onClicked: root.runAction(root.daemonCommand(["copy", modelData.id]), "Copied to clipboard") }
+                                        ActionButton { visible: root.canRetry(modelData); label: "Retry"; onClicked: root.runAction(root.daemonCommand(["retry", modelData.id]), "Retry queued") }
+                                        ActionButton { label: "Delete"; destructive: true; onClicked: root.runAction(root.daemonCommand(["delete-history", modelData.id]), "Dictation deleted") }
                                     }
                                 }
                             }
@@ -309,7 +316,7 @@ FloatingWindow {
                                         Text { text: modelData.heard; color: "#b0b0b0"; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
                                         Text { text: modelData.replacement; color: "#ffffff"; font.pixelSize: 15; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
-                                    ActionButton { label: "Delete"; destructive: true; onClicked: root.runAction(["dictationd", "vocabulary-delete", modelData.id], "Correction deleted") }
+                                    ActionButton { label: "Delete"; destructive: true; onClicked: root.runAction(root.daemonCommand(["vocabulary-delete", modelData.id]), "Correction deleted") }
                                 }
                             }
                             Text { anchors.centerIn: parent; visible: vocabularyList.count === 0; text: "Add names and terms JFlow should write correctly"; color: "#777777"; font.pixelSize: 14 }
