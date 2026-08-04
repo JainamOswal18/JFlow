@@ -5,6 +5,7 @@ import Quickshell.Io
 
 // The Library is intentionally a short-lived, normal desktop window. It reads
 // only local daemon responses; it never sees microphone audio or credentials.
+Scope {
 FloatingWindow {
     id: root
     title: "JFlow"
@@ -167,7 +168,10 @@ FloatingWindow {
                     implicitWidth: 34; implicitHeight: 34; radius: 17
                     color: closeArea.containsMouse ? "#ffffff" : "#202020"
                     Text { anchors.centerIn: parent; text: "×"; color: closeArea.containsMouse ? "#090909" : "#ffffff"; font.pixelSize: 22 }
-                    MouseArea { id: closeArea; anchors.fill: parent; hoverEnabled: true; onClicked: Qt.quit() }
+                    // FloatingWindow has no `closing` signal. Terminate just
+                    // this standalone Quickshell process so it cannot become
+                    // a headless `--no-duplicate` blocker.
+                    MouseArea { id: closeArea; anchors.fill: parent; hoverEnabled: true; onClicked: Quickshell.execDetached(["/usr/bin/kill", "-TERM", String(Quickshell.processId)]) }
                 }
             }
 
@@ -342,4 +346,5 @@ FloatingWindow {
         Text { id: buttonLabel; anchors.centerIn: parent; text: parent.label; color: parent.prominent ? "#090909" : parent.destructive ? "#ffb5af" : "#e9e9e9"; font.pixelSize: 11; font.weight: Font.DemiBold }
         MouseArea { id: buttonArea; anchors.fill: parent; hoverEnabled: true; onClicked: parent.clicked() }
     }
+}
 }
