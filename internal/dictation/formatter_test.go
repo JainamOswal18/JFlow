@@ -3,8 +3,10 @@ package dictation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 )
@@ -59,6 +61,15 @@ func TestWtypeCommandsUseShiftEnterForLineBreaks(t *testing.T) {
 		if strings.Join(got[i], "\x00") != strings.Join(want[i], "\x00") {
 			t.Fatalf("command %d = %#v, want %#v", i, got[i], want[i])
 		}
+	}
+}
+
+func TestExpectedPipeClose(t *testing.T) {
+	if !isExpectedPipeClose(os.ErrClosed) {
+		t.Fatal("os.ErrClosed should be treated as an expected close after stopping capture")
+	}
+	if !isExpectedPipeClose(errors.New("read |0: file already closed")) {
+		t.Fatal("pw-record closed pipe error should be treated as expected after stopping capture")
 	}
 }
 

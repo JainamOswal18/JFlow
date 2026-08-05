@@ -45,6 +45,7 @@ type recording struct {
 	lastVoiceAt  time.Time
 	voiceSeconds float64
 	autoStopping bool
+	stopping     bool
 }
 
 func NewDaemon(cfg Config) (*Daemon, error) {
@@ -293,7 +294,7 @@ func (d *Daemon) beginRecording(job *Job, handsFree bool) (*recording, error) {
 				}
 			}
 			if readErr != nil {
-				if readErr != io.EOF {
+				if readErr != io.EOF && !(r.stopRequested() && isExpectedPipeClose(readErr)) {
 					r.done <- readErr
 				} else {
 					r.done <- nil
@@ -331,6 +332,25 @@ func (r *recording) spokenSeconds() float64 {
 	return r.voiceSeconds
 }
 
+func (r *recording) markStopping() {
+	r.mu.Lock()
+	r.stopping = true
+	r.mu.Unlock()
+}
+
+func (r *recording) stopRequested() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.stopping
+}
+
+// cmd.Wait closes StdoutPipe after pw-record exits. During an intentional
+// stop, the reader can therefore see os.ErrClosed instead of io.EOF even
+// though all captured audio has already been written to the WAV file.
+func isExpectedPipeClose(err error) bool {
+	return errors.Is(err, os.ErrClosed) || strings.Contains(strings.ToLower(err.Error()), "file already closed")
+}
+
 func hasVoice(pcm []byte, threshold int) bool {
 	if len(pcm) < 2 {
 		return false
@@ -366,6 +386,7 @@ func (d *Daemon) stopRecording(r *recording, message string) error {
 	d.recording = nil
 	d.setStatusLocked("processing", message)
 	d.mu.Unlock()
+	r.markStopping()
 	if err := r.cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		// The recording has already been detached from the active state. Make a
 		// best effort to terminate its child process rather than leave the UI in
@@ -438,7 +459,8 @@ func (d *Daemon) stopRecording(r *recording, message string) error {
 		job.Status = StatusFailed
 		job.Error = pipeErr.Error()
 		_ = d.store.Save(job)
-		d.setStatus("error", "Microphone capture failed")
+		d.showAction("error", "Microphone capture failed", job.ID, true)
+		notify("Microphone capture failed", "The recording is saved. Retry is available.")
 		return pipeErr
 	}
 	job.Status = StatusQueued
