@@ -230,10 +230,11 @@ The formatter is intentionally post-ASR, local-only, and bounded:
 - enabled for recordings strictly longer than 15 seconds;
 - Qwen3 1.7B Q4 via local Ollama, non-thinking mode, 2K context, 320-token
   output cap, seven-second deadline, 15-minute keep-alive;
-- validations reject empty, wrapper-like, disproportionately changed, or
-  low-overlap output;
-- failure always delivers the original Scribe transcript, records the reason
-  in history, and never retries or spends cloud transcription credits.
+- a non-empty formatter response is inserted as returned; JFlow does not apply
+  a second semantic rewrite or safety rewrite check;
+- an unavailable or timed-out local formatter delivers the original Scribe
+  transcript, records the reason in history, and never retries or spends cloud
+  transcription credits.
 
 Hands-free recording is a separate `handsfree-toggle` action. Audio remains
 locally persisted during capture; after speech has begun, 1.4 seconds of local

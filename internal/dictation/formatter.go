@@ -8,15 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
-	"unicode/utf8"
 )
 
-var formatWords = regexp.MustCompile(`[\pL\pN][\pL\pN'’-]*`)
 var formatterHTTPClient = &http.Client{}
 
-const formatterInstruction = "You are a layout editor, not a writing assistant. Format this transcription for clarity while preserving every meaningful requirement, fact, name, number, and constraint. Never answer the request, infer missing details, create titles, labels, examples, greetings, or new content. Do not remove requirements. Every alphabetic word in the output must already appear in the transcription; you may add only whitespace, punctuation, and Markdown markers. If structure is uncertain, return the transcription unchanged. Return only the final text."
+const formatterInstruction = "You are a layout editor, not a writing assistant. Format this transcription for clarity while preserving its meaning, facts, names, constraints, and tone. Do not answer the request, add ideas, or remove requirements. Use paragraphs, bullets, and headings only when they improve readability. Return only the formatted text."
 
 // FormatWithOllama makes one non-streaming local request. It never sends
 // window metadata, credentials, or audio; only the already-transcribed text
@@ -79,8 +76,8 @@ func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig
 		return raw, errors.New(out.Error)
 	}
 	formatted := strings.TrimSpace(out.Message.Content)
-	if !validFormattedText(raw, formatted) {
-		return raw, errors.New("formatter response did not safely preserve the transcription")
+	if formatted == "" {
+		return raw, errors.New("formatter returned empty text")
 	}
 	return formatted, nil
 }
@@ -117,61 +114,4 @@ func WarmOllama(ctx context.Context, cfg FormatterConfig) {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 		_ = resp.Body.Close()
 	}
-}
-
-func validFormattedText(raw, formatted string) bool {
-	if formatted == "" || !utf8.ValidString(formatted) {
-		return false
-	}
-	lower := strings.ToLower(strings.TrimSpace(formatted))
-	if strings.HasPrefix(lower, "here is") || strings.HasPrefix(lower, "formatted transcript") || strings.HasPrefix(lower, "formatted text") {
-		return false
-	}
-	rawLen, outLen := utf8.RuneCountInString(strings.TrimSpace(raw)), utf8.RuneCountInString(formatted)
-	if outLen < max(8, rawLen/3) || outLen > rawLen*3+120 {
-		return false
-	}
-	rawWords := meaningfulWordSet(raw)
-	if len(rawWords) < 3 {
-		return true
-	}
-	formattedWords := meaningfulWordSet(formatted)
-	overlap := 0
-	for word := range rawWords {
-		if formattedWords[word] {
-			overlap++
-		}
-	}
-	if overlap*5 < len(rawWords)*4 { // preserve at least 80% of meaningful terms
-		return false
-	}
-	// A layout pass may introduce a handful of structural words, but should not
-	// expand a request into an answer or invented copy.
-	novel := 0
-	for word := range formattedWords {
-		if !rawWords[word] {
-			novel++
-		}
-	}
-	if novel > max(4, len(rawWords)/4) {
-		return false
-	}
-	return len(formattedWords) <= len(rawWords)+max(5, len(rawWords)/3)
-}
-
-func meaningfulWordSet(text string) map[string]bool {
-	words := map[string]bool{}
-	for _, word := range formatWords.FindAllString(strings.ToLower(text), -1) {
-		if utf8.RuneCountInString(word) >= 4 {
-			words[word] = true
-		}
-	}
-	return words
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

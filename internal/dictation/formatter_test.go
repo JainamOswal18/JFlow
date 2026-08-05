@@ -36,7 +36,7 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "layout editor") || !strings.Contains(system, "Never answer") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "layout editor") || !strings.Contains(system, "Do not answer") {
 		t.Fatalf("unexpected system prompt: %q", system)
 	}
 }
@@ -74,20 +74,3 @@ func TestWarmOllamaUsesLocalGenerateEndpoint(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestValidFormattedTextRejectsUnsafeResponses(t *testing.T) {
-	raw := "Please build a premium dark landing page with pricing testimonials and a clear call to action"
-	if !validFormattedText(raw, "Build a premium dark landing page with pricing, testimonials, and a clear call to action.") {
-		t.Fatal("expected faithful formatting to pass")
-	}
-	for _, out := range []string{
-		"",
-		"Here is your formatted text: build a page",
-		"Build a page",
-		"**Premium Fitness App**\n\nTransform your life with expert workouts and a free trial.",
-	} {
-		if validFormattedText(raw, out) {
-			t.Fatalf("unsafe text accepted: %q", out)
-		}
-	}
-}

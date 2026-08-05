@@ -102,9 +102,8 @@ ollama ps
 
 The processor must show `100% GPU`. JFlow pre-warms the model in the background
 after its service starts and keeps it warm for 15 minutes after use. If Ollama
-is unavailable, GPU loading fails, a request exceeds seven
-seconds, or the result does not safely preserve the original transcript, JFlow
-inserts the unformatted Scribe result and marks that fallback in History.
+is unavailable, GPU loading fails, or a request exceeds seven seconds, JFlow
+inserts the unformatted Scribe result and marks that delivery in History.
 
 ## JFlow Library
 
