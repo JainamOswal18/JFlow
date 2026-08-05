@@ -25,10 +25,20 @@ type WindowTarget struct {
 }
 
 type FormattingInfo struct {
-	Eligible    bool   `json:"eligible,omitempty"`
-	Applied     bool   `json:"applied,omitempty"`
-	ContextHint string `json:"context_hint,omitempty"`
-	Skipped     string `json:"skipped,omitempty"`
+	Eligible      bool   `json:"eligible,omitempty"`
+	Applied       bool   `json:"applied,omitempty"`
+	Changed       bool   `json:"changed,omitempty"`
+	ContextHint   string `json:"context_hint,omitempty"`
+	InputText     string `json:"input_text,omitempty"`
+	SystemPrompt  string `json:"system_prompt,omitempty"`
+	Model         string `json:"model,omitempty"`
+	Endpoint      string `json:"endpoint,omitempty"`
+	ContextTokens int    `json:"context_tokens,omitempty"`
+	MaxOutput     int    `json:"max_output_tokens,omitempty"`
+	HTTPStatus    int    `json:"http_status,omitempty"`
+	LatencyMS     int64  `json:"latency_ms,omitempty"`
+	RawResponse   string `json:"raw_response,omitempty"`
+	Skipped       string `json:"skipped,omitempty"`
 }
 
 type Job struct {

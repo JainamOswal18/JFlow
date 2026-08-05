@@ -80,7 +80,10 @@ clean transcript. It uses local Qwen3 1.7B through Ollama; no extra cloud API
 key or ElevenLabs request is used. Formatter output is normalized to plain
 text, so it does not add Markdown syntax to the focused input. JFlow uses a
 strict local JSON contract: dictated text is source data to edit, never a
-question for Qwen to answer.
+question for Qwen to answer. Each eligible job retains a local formatter audit:
+the exact Ollama response body, model, effective system prompt, input text,
+HTTP status, and end-to-end local request latency. It follows the same history
+retention period as that job.
 
 The formatter receives the transcript and, only when confidently inferred from
 the active window, one short local context hint such as “AI-assistant request”,

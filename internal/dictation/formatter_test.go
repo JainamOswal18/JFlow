@@ -26,15 +26,22 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	defer func() { formatterHTTPClient = oldClient }()
 	cfg := DefaultConfig().Formatter
 	cfg.Endpoint = "http://formatter.test"
-	got, err := FormatWithOllama(context.Background(), "Build a landing page use a dark theme and include pricing", "Likely context: an AI-assistant request. Prefer clear structure.", cfg)
+	result, err := FormatWithOllama(context.Background(), "Build a landing page use a dark theme and include pricing", "Likely context: an AI-assistant request. Prefer clear structure.", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := result.Text
 	if !strings.Contains(got, "dark theme") {
 		t.Fatalf("formatted text = %q", got)
 	}
 	if strings.ContainsAny(got, "*#`") || strings.Contains(got, "- Use") {
 		t.Fatalf("formatter returned Markdown instead of plain text: %q", got)
+	}
+	if result.Audit.HTTPStatus != http.StatusOK || result.Audit.Model != cfg.Model || result.Audit.RawResponse == "" || result.Audit.SystemPrompt == "" {
+		t.Fatalf("formatter audit is incomplete: %#v", result.Audit)
+	}
+	if result.Audit.InputText != "Build a landing page use a dark theme and include pricing" || result.Audit.ContextTokens != cfg.ContextTokens || result.Audit.MaxOutput != cfg.MaxOutputTokens {
+		t.Fatalf("formatter audit does not describe the request: %#v", result.Audit)
 	}
 	if payload["think"] != false || payload["stream"] != false {
 		t.Fatalf("expected non-thinking non-streaming payload: %#v", payload)
@@ -47,6 +54,20 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	system := messages[0].(map[string]any)["content"].(string)
 	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "Do not use Markdown") {
 		t.Fatalf("unexpected system prompt: %q", system)
+	}
+}
+
+func TestFreshFormattingInfoClearsOldAttemptState(t *testing.T) {
+	previous := FormattingInfo{
+		Eligible: true, Applied: true, Changed: true, ContextHint: "Likely context: an AI-assistant request.",
+		RawResponse: "old response", Skipped: "old error", LatencyMS: 100,
+	}
+	got := freshFormattingInfo(previous, true)
+	if !got.Eligible || got.ContextHint != previous.ContextHint {
+		t.Fatalf("retry formatting context = %#v", got)
+	}
+	if got.Applied || got.Changed || got.RawResponse != "" || got.Skipped != "" || got.LatencyMS != 0 {
+		t.Fatalf("retry inherited stale formatter state: %#v", got)
 	}
 }
 

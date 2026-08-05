@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var formatterHTTPClient = &http.Client{}
@@ -21,20 +22,40 @@ var (
 	plainBullet  = regexp.MustCompile(`^(?:[-*+]\s+|\d+[.)]\s+)`)
 )
 
+// FormatterResult keeps a local audit trail for exactly one Ollama request.
+// The raw response is retained in the same local job metadata as the audio and
+// transcript, never sent to the cloud or shown in status notifications.
+type FormatterResult struct {
+	Text  string
+	Audit FormattingInfo
+}
+
 // FormatWithOllama makes one non-streaming local request. It never sends
 // window metadata, credentials, or audio; only the already-transcribed text
 // and a fixed, sanitized context hint can leave the daemon process.
-func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig) (string, error) {
+func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig) (result FormatterResult, err error) {
+	started := time.Now()
+	endpoint := strings.TrimRight(cfg.Endpoint, "/") + "/api/chat"
+	result = FormatterResult{Text: raw, Audit: FormattingInfo{
+		ContextHint:   hint,
+		InputText:     raw,
+		Model:         cfg.Model,
+		Endpoint:      endpoint,
+		ContextTokens: cfg.ContextTokens,
+		MaxOutput:     cfg.MaxOutputTokens,
+	}}
+	defer func() { result.Audit.LatencyMS = time.Since(started).Milliseconds() }()
 	if cfg.Mode != "auto" {
-		return raw, errors.New("formatter is disabled")
+		return result, errors.New("formatter is disabled")
 	}
 	if strings.TrimSpace(raw) == "" {
-		return raw, errors.New("formatter received empty text")
+		return result, errors.New("formatter received empty text")
 	}
 	system := formatterInstruction
 	if hint != "" {
 		system += "\n\n" + hint
 	}
+	result.Audit.SystemPrompt = system
 	payload := map[string]any{
 		"model":      cfg.Model,
 		"stream":     false,
@@ -60,22 +81,23 @@ func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return raw, err
+		return result, err
 	}
-	endpoint := strings.TrimRight(cfg.Endpoint, "/") + "/api/chat"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
 	if err != nil {
-		return raw, err
+		return result, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := formatterHTTPClient.Do(req)
 	if err != nil {
-		return raw, fmt.Errorf("local formatter unavailable: %w", err)
+		return result, fmt.Errorf("local formatter unavailable: %w", err)
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	result.Audit.HTTPStatus = resp.StatusCode
+	result.Audit.RawResponse = string(rb)
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return raw, fmt.Errorf("local formatter HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(rb)))
+		return result, fmt.Errorf("local formatter HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(rb)))
 	}
 	var out struct {
 		Message struct {
@@ -84,22 +106,23 @@ func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(rb, &out); err != nil {
-		return raw, fmt.Errorf("invalid local formatter response: %w", err)
+		return result, fmt.Errorf("invalid local formatter response: %w", err)
 	}
 	if out.Error != "" {
-		return raw, errors.New(out.Error)
+		return result, errors.New(out.Error)
 	}
 	var shaped struct {
 		Text string `json:"text"`
 	}
 	if err := json.Unmarshal([]byte(out.Message.Content), &shaped); err != nil {
-		return raw, fmt.Errorf("invalid local formatter JSON: %w", err)
+		return result, fmt.Errorf("invalid local formatter JSON: %w", err)
 	}
 	formatted := normalizePlainText(shaped.Text)
 	if formatted == "" {
-		return raw, errors.New("formatter returned empty text")
+		return result, errors.New("formatter returned empty text")
 	}
-	return formatted, nil
+	result.Text = formatted
+	return result, nil
 }
 
 // normalizePlainText removes the small set of Markdown markers a model might

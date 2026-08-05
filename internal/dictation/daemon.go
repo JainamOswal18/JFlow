@@ -30,6 +30,7 @@ type Daemon struct {
 	processingCancel context.CancelFunc
 	phase            Status
 	work             chan string
+	langfuse         *LangfuseSink
 }
 
 type recording struct {
@@ -58,7 +59,7 @@ func NewDaemon(cfg Config) (*Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &Daemon{cfg: cfg, store: store, vocabulary: NewVocabularyStore(cfg.VocabularyPath()), phase: Status{Phase: "idle"}, work: make(chan string, 32)}
+	d := &Daemon{cfg: cfg, store: store, vocabulary: NewVocabularyStore(cfg.VocabularyPath()), phase: Status{Phase: "idle"}, work: make(chan string, 32), langfuse: NewLangfuseSink(cfg)}
 	d.recoverInterruptedJobs()
 	return d, nil
 }
@@ -91,6 +92,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	go d.worker(ctx)
 	go d.recoveryLoop(ctx)
 	go d.cleanupLoop(ctx)
+	if d.langfuse != nil {
+		go d.langfuse.Run(ctx)
+	}
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -745,6 +749,9 @@ func (d *Daemon) cleanup() {
 			_ = os.RemoveAll(d.store.jobDir(j.ID))
 		}
 	}
+	if d.langfuse != nil {
+		d.langfuse.Cleanup(time.Duration(d.cfg.HistoryRetention) * 24 * time.Hour)
+	}
 }
 
 // Preserve retryable audio across service restarts, while never risking a
@@ -833,25 +840,36 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		job.Error = "Cleanup skipped: " + cleanErr.Error()
 	}
 	text = d.vocabulary.Apply(text)
-	job.Formatting.Eligible = d.cfg.Formatter.Mode == "auto" && job.RecordingSeconds > d.cfg.Formatter.MinRecordingSecs
+	// Retries must not inherit an earlier formatting result. Preserve only the
+	// local context hint captured when recording began, then record this pass.
+	job.Formatting = freshFormattingInfo(job.Formatting, d.cfg.Formatter.Mode == "auto" && job.RecordingSeconds > d.cfg.Formatter.MinRecordingSecs)
 	if job.Formatting.Eligible {
 		job.Status = StatusFormatting
 		_ = d.store.Save(job)
 		d.setStatus("processing", "Formatting")
 		formatCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.Formatter.TimeoutSecs)*time.Second)
-		formatted, formatErr := FormatWithOllama(formatCtx, text, job.Formatting.ContextHint, d.cfg.Formatter)
+		beforeFormatting := text
+		result, formatErr := FormatWithOllama(formatCtx, beforeFormatting, job.Formatting.ContextHint, d.cfg.Formatter)
 		cancel()
+		job.Formatting = result.Audit
+		job.Formatting.Eligible = true
 		if d.cancelledProcessing(ctx, job) {
 			return
 		}
 		if formatErr != nil {
 			job.Formatting.Skipped = formatErr.Error()
 		} else {
-			text = formatted
+			text = result.Text
 			job.Formatting.Applied = true
+			job.Formatting.Changed = text != beforeFormatting
 		}
 	}
 	job.FinalText = text
+	if job.Formatting.Eligible && d.langfuse != nil {
+		// Queueing is local and atomic. Network synchronization happens on its
+		// own worker, never in the dictation or insertion path.
+		d.langfuse.QueueFormatter(job)
+	}
 	job.Status = StatusDelivering
 	_ = d.store.Save(job)
 	d.setStatus("processing", "Inserting")
@@ -889,6 +907,10 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		message = "Inserted — formatting skipped"
 	}
 	d.showAction("delivered", message, job.ID, false)
+}
+
+func freshFormattingInfo(previous FormattingInfo, eligible bool) FormattingInfo {
+	return FormattingInfo{Eligible: eligible, ContextHint: previous.ContextHint}
 }
 
 func (d *Daemon) cancelledProcessing(ctx context.Context, job *Job) bool {

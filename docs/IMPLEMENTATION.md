@@ -78,6 +78,12 @@ so multiline formatter output stays in chat composers instead of submitting a
 message. Formatter output is constrained and normalized to plain text before
 insertion.
 
+For every eligible formatting request, the job metadata records the local Qwen
+model, formatter input, exact system prompt, HTTP status, end-to-end latency,
+and raw Ollama response. This makes it possible to audit whether Qwen changed
+text or returned it unchanged. A retry clears the previous formatting audit
+before starting a new request.
+
 ## Installed locations on this laptop
 
 | Purpose | Location |

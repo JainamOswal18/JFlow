@@ -84,7 +84,8 @@ FloatingWindow {
         if (!job.formatting || !job.formatting.eligible) return ""
         var hint = job.formatting.context_hint || ""
         var context = hint.indexOf("AI-assistant") >= 0 ? "AI prompt" : hint.indexOf("professional") >= 0 ? "Professional" : hint.indexOf("casual") >= 0 ? "Casual" : "Neutral"
-        return context + " · " + (job.formatting.applied ? "formatted" : "original kept")
+        if (!job.formatting.applied) return context + " · original kept"
+        return context + " · " + (job.formatting.changed ? "formatted" : "unchanged")
     }
 
     Component.onCompleted: {

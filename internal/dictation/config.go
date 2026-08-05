@@ -22,6 +22,7 @@ type Config struct {
 	ASR              ASRConfig       `json:"asr"`
 	Cleanup          CleanupConfig   `json:"cleanup"`
 	Formatter        FormatterConfig `json:"formatter"`
+	Langfuse         LangfuseConfig  `json:"langfuse"`
 	HandsFree        HandsFreeConfig `json:"hands_free"`
 	UI               UIConfig        `json:"ui"`
 	Sound            SoundConfig     `json:"sound"`
@@ -68,6 +69,17 @@ type FormatterConfig struct {
 	MaxOutputTokens  int     `json:"max_output_tokens"`
 }
 
+// LangfuseConfig controls local-first formatter telemetry. Credentials are
+// intentionally read only from credentials.env, never from this JSON file.
+type LangfuseConfig struct {
+	Enabled          bool   `json:"enabled"`
+	BaseURL          string `json:"base_url"`
+	PublicKeyEnv     string `json:"public_key_env"`
+	SecretKeyEnv     string `json:"secret_key_env"`
+	SyncIntervalSecs int    `json:"sync_interval_seconds"`
+	TimeoutSecs      int    `json:"timeout_seconds"`
+}
+
 type HandsFreeConfig struct {
 	Enabled        bool    `json:"enabled"`
 	SilenceSecs    float64 `json:"silence_seconds"`
@@ -110,6 +122,7 @@ func DefaultConfig() Config {
 		ASR:       ASRConfig{Provider: "elevenlabs_batch", APIKeyEnv: "ELEVENLABS_API_KEY", Language: "eng", Secondary: []string{"hin"}, NoVerbatim: true, Model: "scribe_v2", Endpoint: "https://api.elevenlabs.io/v1/speech-to-text"},
 		Cleanup:   CleanupConfig{Enabled: false, APIKeyEnv: "LLM_API_KEY", Endpoint: "", Model: ""},
 		Formatter: FormatterConfig{Mode: "auto", Endpoint: "http://127.0.0.1:11434", Model: "qwen3:1.7b", MinRecordingSecs: 15, TimeoutSecs: 7, KeepAlive: "15m", ContextTokens: 2048, MaxOutputTokens: 320},
+		Langfuse:  LangfuseConfig{Enabled: true, BaseURL: "https://cloud.langfuse.com", PublicKeyEnv: "LANGFUSE_PUBLIC_KEY", SecretKeyEnv: "LANGFUSE_SECRET_KEY", SyncIntervalSecs: 30, TimeoutSecs: 8},
 		HandsFree: HandsFreeConfig{Enabled: true, SilenceSecs: 1.4, MinSpeechSecs: 0.4, VoiceThreshold: 650},
 		UI:        UIConfig{Enabled: true},
 		Sound:     SoundConfig{Enabled: true},
@@ -171,6 +184,21 @@ func LoadConfig(path string) (Config, error) {
 	if cfg.Formatter.MaxOutputTokens <= 0 {
 		cfg.Formatter.MaxOutputTokens = 320
 	}
+	if cfg.Langfuse.BaseURL == "" {
+		cfg.Langfuse.BaseURL = "https://cloud.langfuse.com"
+	}
+	if cfg.Langfuse.PublicKeyEnv == "" {
+		cfg.Langfuse.PublicKeyEnv = "LANGFUSE_PUBLIC_KEY"
+	}
+	if cfg.Langfuse.SecretKeyEnv == "" {
+		cfg.Langfuse.SecretKeyEnv = "LANGFUSE_SECRET_KEY"
+	}
+	if cfg.Langfuse.SyncIntervalSecs <= 0 {
+		cfg.Langfuse.SyncIntervalSecs = 30
+	}
+	if cfg.Langfuse.TimeoutSecs <= 0 {
+		cfg.Langfuse.TimeoutSecs = 8
+	}
 	if cfg.HandsFree.SilenceSecs <= 0 {
 		cfg.HandsFree.SilenceSecs = 1.4
 	}
@@ -221,9 +249,10 @@ func LoadCredentials(path string) error {
 	return nil
 }
 
-func (c Config) SocketPath() string { return filepath.Join(c.RuntimeDir, "control.sock") }
-func (c Config) StatusPath() string { return filepath.Join(c.RuntimeDir, "status.json") }
-func (c Config) JobsDir() string    { return filepath.Join(c.DataDir, "jobs") }
+func (c Config) SocketPath() string       { return filepath.Join(c.RuntimeDir, "control.sock") }
+func (c Config) StatusPath() string       { return filepath.Join(c.RuntimeDir, "status.json") }
+func (c Config) JobsDir() string          { return filepath.Join(c.DataDir, "jobs") }
+func (c Config) LangfuseQueueDir() string { return filepath.Join(c.StateDir, "langfuse", "pending") }
 func (c Config) VocabularyPath() string {
 	return filepath.Join(defaultBase("XDG_CONFIG_HOME", ".config"), "dictationd", "vocabulary.json")
 }
