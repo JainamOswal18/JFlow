@@ -595,7 +595,7 @@ Scope {
                                             }
 
                                             ActionButton {
-                                                visible: modelData.formatting && modelData.formatting.eligible
+                                                visible: !!(modelData.formatting && modelData.formatting.eligible)
                                                 label: "Audit"
                                                 onClicked: {
                                                     root.auditJobID = modelData.id;
@@ -604,13 +604,13 @@ Scope {
                                             }
 
                                             ActionButton {
-                                                visible: modelData.formatting && modelData.formatting.eligible
+                                                visible: !!(modelData.formatting && modelData.formatting.eligible)
                                                 label: "Useful"
                                                 onClicked: root.setFormatterFeedback(modelData, "helpful")
                                             }
 
                                             ActionButton {
-                                                visible: modelData.formatting && modelData.formatting.eligible
+                                                visible: !!(modelData.formatting && modelData.formatting.eligible)
                                                 label: "Needs work"
                                                 onClicked: root.setFormatterFeedback(modelData, "needs_work")
                                             }

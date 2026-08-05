@@ -127,7 +127,10 @@ func openLibrary(cfg dictation.Config) {
 	// library is independent of recording, so replace only this UI instance
 	// before every open instead of trusting that stale-instance detection.
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	_ = exec.CommandContext(stopCtx, "/usr/bin/qs", "kill", "-p", cfg.LibraryUIPath()).Run()
+	// A detached Library process can retain an "unknown" display connection
+	// after a compositor reconnect. Include every display so a stale instance
+	// cannot survive the next open and leave duplicate JFlow windows behind.
+	_ = exec.CommandContext(stopCtx, "/usr/bin/qs", "kill", "--any-display", "-p", cfg.LibraryUIPath()).Run()
 	cancel()
 	cmd := exec.CommandContext(context.Background(), "/usr/bin/qs", "-p", cfg.LibraryUIPath())
 	// The Library must outlive the short launcher command. A separate session
