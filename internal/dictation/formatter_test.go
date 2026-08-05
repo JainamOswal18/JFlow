@@ -21,7 +21,7 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"**Build a landing page.**\n\n- Use a dark theme\n- Include pricing"}}`)), Header: make(http.Header)}, nil
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"{\"text\":\"**Build a landing page.**\\n\\n- Use a dark theme\\n- Include pricing\"}"}}`)), Header: make(http.Header)}, nil
 	})}
 	defer func() { formatterHTTPClient = oldClient }()
 	cfg := DefaultConfig().Formatter
@@ -39,9 +39,13 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	if payload["think"] != false || payload["stream"] != false {
 		t.Fatalf("expected non-thinking non-streaming payload: %#v", payload)
 	}
+	format := payload["format"].(map[string]any)
+	if format["type"] != "object" || format["additionalProperties"] != false {
+		t.Fatalf("expected a strict JSON formatter contract: %#v", format)
+	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "plain-text layout editor") || !strings.Contains(system, "Do not answer") || !strings.Contains(system, "do not use Markdown") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "Do not use Markdown") {
 		t.Fatalf("unexpected system prompt: %q", system)
 	}
 }

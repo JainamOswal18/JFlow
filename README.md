@@ -78,7 +78,9 @@ short accidental utterance is discarded, and `Escape` cancels safely.
 JFlow formats recordings longer than 15 seconds after Scribe has returned its
 clean transcript. It uses local Qwen3 1.7B through Ollama; no extra cloud API
 key or ElevenLabs request is used. Formatter output is normalized to plain
-text, so it does not add Markdown syntax to the focused input.
+text, so it does not add Markdown syntax to the focused input. JFlow uses a
+strict local JSON contract: dictated text is source data to edit, never a
+question for Qwen to answer.
 
 The formatter receives the transcript and, only when confidently inferred from
 the active window, one short local context hint such as “AI-assistant request”,
