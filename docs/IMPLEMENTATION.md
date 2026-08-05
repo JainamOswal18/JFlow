@@ -68,9 +68,15 @@ distracting live preview or a network operation in the hotkey start path.
 
 JFlow records the active Hyprland window at dictation start. If focus has
 changed by the time text is ready, it copies text to the Wayland clipboard
-instead of typing into the current window. It also persists a
+instead of typing into the current window. Successful insertion never modifies
+the clipboard. It also persists a
 `delivery_attempted` flag before `wtype` runs. After a crash in that narrow
 window, the job requires explicit recovery rather than risking duplicated text.
+
+Literal line breaks are sent as `Shift+Enter`, rather than raw Enter key events,
+so multiline formatter output stays in chat composers instead of submitting a
+message. Formatter output is constrained and normalized to plain text before
+insertion.
 
 ## Installed locations on this laptop
 

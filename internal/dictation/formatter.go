@@ -8,12 +8,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
 var formatterHTTPClient = &http.Client{}
 
-const formatterInstruction = "You are a layout editor, not a writing assistant. Format this transcription for clarity while preserving its meaning, facts, names, constraints, and tone. Do not answer the request, add ideas, or remove requirements. Use paragraphs, bullets, and headings only when they improve readability. Return only the formatted text."
+const formatterInstruction = "You are a plain-text layout editor, not a writing assistant. Format this transcription for clarity while preserving its meaning, facts, names, constraints, and tone. Do not answer the request, add ideas, or remove requirements. Return plain text only: do not use Markdown, headings, bullets, numbered lists, code fences, or emphasis markers. Use ordinary sentences and line breaks only when they improve readability."
+
+var (
+	plainHeading = regexp.MustCompile(`^#{1,6}\s+`)
+	plainBullet  = regexp.MustCompile(`^(?:[-*+]\s+|\d+[.)]\s+)`)
+)
 
 // FormatWithOllama makes one non-streaming local request. It never sends
 // window metadata, credentials, or audio; only the already-transcribed text
@@ -75,11 +81,41 @@ func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig
 	if out.Error != "" {
 		return raw, errors.New(out.Error)
 	}
-	formatted := strings.TrimSpace(out.Message.Content)
+	formatted := normalizePlainText(out.Message.Content)
 	if formatted == "" {
 		return raw, errors.New("formatter returned empty text")
 	}
 	return formatted, nil
+}
+
+// normalizePlainText removes the small set of Markdown markers a model might
+// still emit despite the formatter instruction. It deliberately does not
+// rewrite wording or sentence structure.
+func normalizePlainText(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	lines := strings.Split(text, "\n")
+	clean := make([]string, 0, len(lines))
+	inFence := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			clean = append(clean, line)
+			continue
+		}
+		trimmed = plainHeading.ReplaceAllString(trimmed, "")
+		trimmed = plainBullet.ReplaceAllString(trimmed, "")
+		trimmed = strings.ReplaceAll(trimmed, "**", "")
+		trimmed = strings.ReplaceAll(trimmed, "__", "")
+		trimmed = strings.ReplaceAll(trimmed, "~~", "")
+		trimmed = strings.ReplaceAll(trimmed, "`", "")
+		clean = append(clean, trimmed)
+	}
+	return strings.TrimSpace(strings.Join(clean, "\n"))
 }
 
 // WarmOllama loads the local model after the daemon starts, outside any

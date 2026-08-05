@@ -754,7 +754,7 @@ func (d *Daemon) recoverInterruptedJobs() {
 		case StatusDelivering:
 			if job.DeliveryAttempted {
 				job.Status = StatusFailed
-				job.ClipboardBackup = true
+				job.ClipboardBackup = false
 				job.Error = "Insertion interrupted; final text retained to avoid duplicate typing"
 				_ = d.store.Save(job)
 			} else {
@@ -836,20 +836,17 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	if d.cancelledProcessing(ctx, job) {
 		return
 	}
-	// Wayland does not expose whether the focused surface has an editable text
-	// field. wtype can therefore succeed even when the application discards the
-	// text. Put every completed dictation on the clipboard first, so paste is a
-	// reliable recovery path regardless of where it was dictated.
-	clipboardErr := copyClipboard(job.FinalText)
-	if d.cancelledProcessing(ctx, job) {
-		return
-	}
-	job.ClipboardBackup = clipboardErr == nil
+	// Do not alter the user's clipboard on a successful insertion. The final
+	// text is always retained in local history; the clipboard is a recovery path
+	// only when insertion is unsafe or fails.
+	job.ClipboardBackup = false
 	job.DeliveryAttempted = true
 	_ = d.store.Save(job)
 	if err := d.deliver(job); err != nil {
 		job.Status = StatusFailed
-		if job.ClipboardBackup {
+		clipboardErr := copyClipboard(job.FinalText)
+		if clipboardErr == nil {
+			job.ClipboardBackup = true
 			job.Error = "Copied to clipboard: " + err.Error()
 			notify("Dictation ready", "Text was copied to the clipboard. Click a field and paste it.")
 			d.showAction("copied", "Copied to clipboard", job.ID, false)
@@ -931,20 +928,11 @@ func (d *Daemon) deliver(job *Job) error {
 	if d.cfg.SafeInsertion && job.Target.Address != "" {
 		current := activeWindow()
 		if current.Address != job.Target.Address {
-			if !job.ClipboardBackup {
-				return errors.New("focused window changed and clipboard backup failed")
-			}
 			return errors.New("focused window changed")
 		}
 	}
 	if err := typeText(job.FinalText); err != nil {
-		if !job.ClipboardBackup {
-			return fmt.Errorf("text insertion failed and clipboard backup failed: %w", err)
-		}
 		return err
-	}
-	if !job.ClipboardBackup {
-		notify("Clipboard unavailable", "The dictation was inserted, but could not be saved to the clipboard.")
 	}
 	return nil
 }
@@ -997,11 +985,35 @@ func copyClipboard(text string) error {
 func typeText(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := exec.CommandContext(ctx, "wtype", text).Run()
-	if ctx.Err() != nil {
-		return fmt.Errorf("wtype timed out after 2 seconds: %w", ctx.Err())
+	for _, args := range wtypeCommands(text) {
+		if err := exec.CommandContext(ctx, "wtype", args...).Run(); err != nil {
+			if ctx.Err() != nil {
+				return fmt.Errorf("wtype timed out after 2 seconds: %w", ctx.Err())
+			}
+			return fmt.Errorf("wtype %q: %w", args, err)
+		}
 	}
-	return err
+	return nil
+}
+
+// wtype treats newlines in text as Enter keypresses. In chat applications
+// that submits the message, so insert each line separately and use
+// Shift+Enter for literal line breaks instead.
+func wtypeCommands(text string) [][]string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	lines := strings.Split(text, "\n")
+	commands := make([][]string, 0, len(lines)*2)
+	for i, line := range lines {
+		if line != "" {
+			// -- ensures a dictated line beginning with '-' is text, not an option.
+			commands = append(commands, []string{"--", line})
+		}
+		if i < len(lines)-1 {
+			commands = append(commands, []string{"-M", "shift", "-k", "Return"})
+		}
+	}
+	return commands
 }
 func notify(title, body string) {
 	_ = exec.Command("notify-send", "--app-name=dictationd", title, body).Run()

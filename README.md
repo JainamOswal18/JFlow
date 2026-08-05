@@ -60,9 +60,9 @@ should follow the commands above.
 background daemon over a user-only Unix socket.
 
 Typical use: hold `Super+R`, speak, then release it. Use `Super+Shift+V` to
-retry the last failed job. Every completed dictation is copied to the clipboard
-before insertion, so it can always be pasted if the focused app has no editable
-field or rejects simulated typing.
+retry the last failed job. Successful dictation leaves your clipboard unchanged.
+If insertion is unsafe or fails, JFlow copies the saved final text to the
+clipboard so it can be pasted into the intended field.
 
 Press `Escape` to cancel an active recording; it is non-consuming while idle,
 so applications still receive their normal Escape keypress. The bottom overlay
@@ -77,7 +77,8 @@ short accidental utterance is discarded, and `Escape` cancels safely.
 
 JFlow formats recordings longer than 15 seconds after Scribe has returned its
 clean transcript. It uses local Qwen3 1.7B through Ollama; no extra cloud API
-key or ElevenLabs request is used.
+key or ElevenLabs request is used. Formatter output is normalized to plain
+text, so it does not add Markdown syntax to the focused input.
 
 The formatter receives the transcript and, only when confidently inferred from
 the active window, one short local context hint such as “AI-assistant request”,

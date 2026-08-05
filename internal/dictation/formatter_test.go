@@ -19,7 +19,7 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"Build a landing page.\n\n- Use a dark theme\n- Include pricing"}}`)), Header: make(http.Header)}, nil
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"**Build a landing page.**\n\n- Use a dark theme\n- Include pricing"}}`)), Header: make(http.Header)}, nil
 	})}
 	defer func() { formatterHTTPClient = oldClient }()
 	cfg := DefaultConfig().Formatter
@@ -31,13 +31,34 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	if !strings.Contains(got, "dark theme") {
 		t.Fatalf("formatted text = %q", got)
 	}
+	if strings.ContainsAny(got, "*#`") || strings.Contains(got, "- Use") {
+		t.Fatalf("formatter returned Markdown instead of plain text: %q", got)
+	}
 	if payload["think"] != false || payload["stream"] != false {
 		t.Fatalf("expected non-thinking non-streaming payload: %#v", payload)
 	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "layout editor") || !strings.Contains(system, "Do not answer") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "plain-text layout editor") || !strings.Contains(system, "Do not answer") || !strings.Contains(system, "do not use Markdown") {
 		t.Fatalf("unexpected system prompt: %q", system)
+	}
+}
+
+func TestWtypeCommandsUseShiftEnterForLineBreaks(t *testing.T) {
+	got := wtypeCommands("first line\n\n-second line")
+	want := [][]string{
+		{"--", "first line"},
+		{"-M", "shift", "-k", "Return"},
+		{"-M", "shift", "-k", "Return"},
+		{"--", "-second line"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("commands = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if strings.Join(got[i], "\x00") != strings.Join(want[i], "\x00") {
+			t.Fatalf("command %d = %#v, want %#v", i, got[i], want[i])
+		}
 	}
 }
 
