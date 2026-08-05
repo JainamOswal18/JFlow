@@ -9,6 +9,7 @@ const (
 	StatusQueued       JobStatus = "queued"
 	StatusTranscribing JobStatus = "transcribing"
 	StatusCleaning     JobStatus = "cleaning"
+	StatusFormatting   JobStatus = "formatting"
 	StatusDelivering   JobStatus = "delivering"
 	StatusRetryWait    JobStatus = "retry_wait"
 	StatusDelivered    JobStatus = "delivered"
@@ -20,23 +21,33 @@ type WindowTarget struct {
 	Address string `json:"address,omitempty"`
 	Class   string `json:"class,omitempty"`
 	Title   string `json:"title,omitempty"`
+	PID     int    `json:"pid,omitempty"`
+}
+
+type FormattingInfo struct {
+	Eligible    bool   `json:"eligible,omitempty"`
+	Applied     bool   `json:"applied,omitempty"`
+	ContextHint string `json:"context_hint,omitempty"`
+	Skipped     string `json:"skipped,omitempty"`
 }
 
 type Job struct {
-	ID                string       `json:"id"`
-	Status            JobStatus    `json:"status"`
-	CreatedAt         time.Time    `json:"created_at"`
-	UpdatedAt         time.Time    `json:"updated_at"`
-	AudioPath         string       `json:"audio_path"`
-	Target            WindowTarget `json:"target"`
-	Transcript        string       `json:"transcript,omitempty"`
-	FinalText         string       `json:"final_text,omitempty"`
-	Error             string       `json:"error,omitempty"`
-	Attempts          int          `json:"attempts"`
-	NextAttemptAt     time.Time    `json:"next_attempt_at,omitempty"`
-	DeliveredAt       time.Time    `json:"delivered_at,omitempty"`
-	DeliveryAttempted bool         `json:"delivery_attempted"`
-	ClipboardBackup   bool         `json:"clipboard_backup"`
+	ID                string         `json:"id"`
+	Status            JobStatus      `json:"status"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	AudioPath         string         `json:"audio_path"`
+	Target            WindowTarget   `json:"target"`
+	Transcript        string         `json:"transcript,omitempty"`
+	FinalText         string         `json:"final_text,omitempty"`
+	Error             string         `json:"error,omitempty"`
+	Attempts          int            `json:"attempts"`
+	NextAttemptAt     time.Time      `json:"next_attempt_at,omitempty"`
+	DeliveredAt       time.Time      `json:"delivered_at,omitempty"`
+	DeliveryAttempted bool           `json:"delivery_attempted"`
+	ClipboardBackup   bool           `json:"clipboard_backup"`
+	RecordingSeconds  float64        `json:"recording_seconds,omitempty"`
+	Formatting        FormattingInfo `json:"formatting,omitempty"`
 }
 
 // VocabularyEntry is a user-owned canonical word or phrase. Canonical terms

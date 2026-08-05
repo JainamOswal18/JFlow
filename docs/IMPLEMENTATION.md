@@ -33,6 +33,11 @@ dictation.
   overlay larger or permanently consuming desktop resources.
 - Canonical vocabulary terms are sent to Scribe v2 as keyterms, while locally
   learned aliases are applied after ASR and never leave the device.
+- For recordings over 15 seconds, a local Qwen3 formatter can structure the
+  already-cleaned Scribe text. It uses a fixed safety instruction plus, at most,
+  one locally inferred context hint; raw titles never enter the model prompt.
+- Tap-to-dictate is available separately from the hold binding. It ends after
+  sustained local silence and never keeps the microphone always on.
 - Hyprland hold/release binding for `Super+R` and a recovery binding on
   `Super+Shift+V`.
 - User-level systemd units for the daemon and indicator.
@@ -209,6 +214,31 @@ in the credential file during implementation.
 4. Decide whether cleanup is needed after testing Scribe's `no_verbatim` mode.
    If enabled, test it carefully with technical text and code-related speech.
 5. Phase 3 can add optional per-app profiles and hands-free mode.
+
+## Phase 3: automatic context and local formatting
+
+Phase 3 treats context as a weak signal, not a rigid per-application template.
+At recording start JFlow snapshots the active Hyprland class, title, and PID.
+It looks for a small set of high-confidence categories locally: AI assistant,
+professional message, casual message, or terminal running an AI assistant.
+Only a fixed one-line result can reach Qwen; unrecognised contexts receive no
+hint. This avoids both browser-title prompt injection and overfitting all text
+from a particular application to one style.
+
+The formatter is intentionally post-ASR, local-only, and bounded:
+
+- enabled for recordings strictly longer than 15 seconds;
+- Qwen3 1.7B Q4 via local Ollama, non-thinking mode, 2K context, 320-token
+  output cap, seven-second deadline, 15-minute keep-alive;
+- validations reject empty, wrapper-like, disproportionately changed, or
+  low-overlap output;
+- failure always delivers the original Scribe transcript, records the reason
+  in history, and never retries or spends cloud transcription credits.
+
+Hands-free recording is a separate `handsfree-toggle` action. Audio remains
+locally persisted during capture; after speech has begun, 1.4 seconds of local
+silence ends capture. Escape cancellation and all normal retry semantics stay
+unchanged.
 
 ## Future enhancement: learn from an edited selection
 

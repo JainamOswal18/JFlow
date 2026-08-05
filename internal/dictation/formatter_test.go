@@ -1,0 +1,93 @@
+package dictation
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
+	var payload map[string]any
+	oldClient := formatterHTTPClient
+	formatterHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/api/chat" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"Build a landing page.\n\n- Use a dark theme\n- Include pricing"}}`)), Header: make(http.Header)}, nil
+	})}
+	defer func() { formatterHTTPClient = oldClient }()
+	cfg := DefaultConfig().Formatter
+	cfg.Endpoint = "http://formatter.test"
+	got, err := FormatWithOllama(context.Background(), "Build a landing page use a dark theme and include pricing", "Likely context: an AI-assistant request. Prefer clear structure.", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "dark theme") {
+		t.Fatalf("formatted text = %q", got)
+	}
+	if payload["think"] != false || payload["stream"] != false {
+		t.Fatalf("expected non-thinking non-streaming payload: %#v", payload)
+	}
+	messages := payload["messages"].([]any)
+	system := messages[0].(map[string]any)["content"].(string)
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "layout editor") || !strings.Contains(system, "Never answer") {
+		t.Fatalf("unexpected system prompt: %q", system)
+	}
+}
+
+func TestWarmOllamaUsesLocalGenerateEndpoint(t *testing.T) {
+	oldClient := formatterHTTPClient
+	defer func() { formatterHTTPClient = oldClient }()
+	called := false
+	formatterHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		called = true
+		if r.URL.Path != "/api/generate" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["model"] != "qwen3:1.7b" || payload["keep_alive"] != "15m" {
+			t.Fatalf("unexpected warm payload: %#v", payload)
+		}
+		options := payload["options"].(map[string]any)
+		if options["num_ctx"] != float64(2048) {
+			t.Fatalf("unexpected warm options: %#v", options)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
+	})}
+	cfg := DefaultConfig().Formatter
+	cfg.Endpoint = "http://formatter.test"
+	WarmOllama(context.Background(), cfg)
+	if !called {
+		t.Fatal("warm endpoint was not called")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestValidFormattedTextRejectsUnsafeResponses(t *testing.T) {
+	raw := "Please build a premium dark landing page with pricing testimonials and a clear call to action"
+	if !validFormattedText(raw, "Build a premium dark landing page with pricing, testimonials, and a clear call to action.") {
+		t.Fatal("expected faithful formatting to pass")
+	}
+	for _, out := range []string{
+		"",
+		"Here is your formatted text: build a page",
+		"Build a page",
+		"**Premium Fitness App**\n\nTransform your life with expert workouts and a free trial.",
+	} {
+		if validFormattedText(raw, out) {
+			t.Fatalf("unsafe text accepted: %q", out)
+		}
+	}
+}

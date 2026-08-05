@@ -47,7 +47,7 @@ func main() {
 		if err := d.Run(ctx); err != nil {
 			fatal(err)
 		}
-	case "start", "stop", "toggle", "cancel", "cancel-if-recording", "retry-last", "dismiss-last", "copy-last", "status":
+	case "start", "stop", "toggle", "handsfree-start", "handsfree-toggle", "cancel", "cancel-if-recording", "retry-last", "dismiss-last", "copy-last", "status":
 		callAndPrint(cfg, dictation.Command{Action: os.Args[1]})
 	case "copy":
 		if len(os.Args) != 3 {
@@ -152,5 +152,5 @@ func call(cfg dictation.Config, cmd dictation.Command) (dictation.Response, erro
 func printJSON(v any) { b, _ := json.MarshalIndent(v, "", "  "); fmt.Println(string(b)) }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "dictationd:", err); os.Exit(1) }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|correct-history JOB_ID FINAL_TEXT|vocabulary|vocabulary-add WORD_OR_PHRASE|vocabulary-delete ENTRY_ID|library>")
+	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|handsfree-start|handsfree-toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|correct-history JOB_ID FINAL_TEXT|vocabulary|vocabulary-add WORD_OR_PHRASE|vocabulary-delete ENTRY_ID|library>")
 }

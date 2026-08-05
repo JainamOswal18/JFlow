@@ -33,11 +33,18 @@ type Daemon struct {
 }
 
 type recording struct {
-	jobID    string
-	cmd      *exec.Cmd
-	done     chan error
-	realtime *RealtimeScribe
-	wav      *wavWriter
+	jobID        string
+	cmd          *exec.Cmd
+	done         chan error
+	realtime     *RealtimeScribe
+	wav          *wavWriter
+	handsFree    bool
+	sampleRate   int
+	startedAt    time.Time
+	mu           sync.Mutex
+	lastVoiceAt  time.Time
+	voiceSeconds float64
+	autoStopping bool
 }
 
 func NewDaemon(cfg Config) (*Daemon, error) {
@@ -73,6 +80,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 		_ = ln.Close() // unblock Accept so systemd restarts do not hang
 	}()
 	d.setStatus("idle", "Ready")
+	if d.cfg.Formatter.Mode == "auto" {
+		go func() {
+			warmCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+			defer cancel()
+			WarmOllama(warmCtx, d.cfg.Formatter)
+		}()
+	}
 	go d.worker(ctx)
 	go d.recoveryLoop(ctx)
 	go d.cleanupLoop(ctx)
@@ -134,6 +148,14 @@ func (d *Daemon) handleConnection(c net.Conn) {
 		switch cmd.Action {
 		case "start":
 			err = d.Start()
+		case "handsfree-start":
+			err = d.StartHandsFree()
+		case "handsfree-toggle":
+			if d.isRecording() {
+				err = d.Stop()
+			} else {
+				err = d.StartHandsFree()
+			}
 		case "stop":
 			err = d.Stop()
 		case "toggle":
@@ -185,6 +207,17 @@ func (d *Daemon) handleConnection(c net.Conn) {
 }
 
 func (d *Daemon) Start() error {
+	return d.start(false)
+}
+
+func (d *Daemon) StartHandsFree() error {
+	if !d.cfg.HandsFree.Enabled {
+		return errors.New("hands-free dictation is disabled")
+	}
+	return d.start(true)
+}
+
+func (d *Daemon) start(handsFree bool) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.recording != nil {
@@ -195,11 +228,12 @@ func (d *Daemon) Start() error {
 		return err
 	}
 	now := time.Now().UTC()
-	job := &Job{ID: id, Status: StatusRecording, CreatedAt: now, AudioPath: d.store.AudioPath(id), Target: activeWindow()}
+	target := activeWindow()
+	job := &Job{ID: id, Status: StatusRecording, CreatedAt: now, AudioPath: d.store.AudioPath(id), Target: target, Formatting: FormattingInfo{ContextHint: InferContextHint(target)}}
 	if err := d.store.Save(job); err != nil {
 		return err
 	}
-	r, err := d.beginRecording(job)
+	r, err := d.beginRecording(job, handsFree)
 	if err != nil {
 		job.Status = StatusFailed
 		job.Error = err.Error()
@@ -207,12 +241,16 @@ func (d *Daemon) Start() error {
 		return err
 	}
 	d.recording = r
-	d.setStatusLocked("recording", "Listening")
+	if handsFree {
+		d.setStatusLocked("recording", "Listening hands-free")
+	} else {
+		d.setStatusLocked("recording", "Listening")
+	}
 	d.playCue("message-new-instant")
 	return nil
 }
 
-func (d *Daemon) beginRecording(job *Job) (*recording, error) {
+func (d *Daemon) beginRecording(job *Job, handsFree bool) (*recording, error) {
 	args := []string{"--raw", "--rate", fmt.Sprint(d.cfg.SampleRate), "--channels", "1", "--format", "s16", "-"}
 	if d.cfg.MicTarget != "" {
 		args = append(args[:1], append([]string{"--target", d.cfg.MicTarget}, args[1:]...)...)
@@ -225,7 +263,7 @@ func (d *Daemon) beginRecording(job *Job) (*recording, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start pw-record: %w", err)
 	}
-	r := &recording{jobID: job.ID, cmd: cmd, done: make(chan error, 1)}
+	r := &recording{jobID: job.ID, cmd: cmd, done: make(chan error, 1), handsFree: handsFree, sampleRate: d.cfg.SampleRate, startedAt: time.Now()}
 	wav, err := newWavWriter(job.AudioPath, d.cfg.SampleRate)
 	if err != nil {
 		_ = cmd.Process.Kill()
@@ -250,6 +288,9 @@ func (d *Daemon) beginRecording(job *Job) (*recording, error) {
 				if r.realtime != nil {
 					_ = r.realtime.Send(context.Background(), chunk)
 				}
+				if r.shouldAutoStop(chunk, d.cfg.HandsFree) {
+					go func() { _ = d.stopRecording(r, "Silence detected") }()
+				}
 			}
 			if readErr != nil {
 				if readErr != io.EOF {
@@ -262,6 +303,48 @@ func (d *Daemon) beginRecording(job *Job) (*recording, error) {
 		}
 	}()
 	return r, nil
+}
+
+func (r *recording) shouldAutoStop(pcm []byte, cfg HandsFreeConfig) bool {
+	if !r.handsFree || !hasVoice(pcm, cfg.VoiceThreshold) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if !r.handsFree || r.lastVoiceAt.IsZero() || r.autoStopping {
+			return false
+		}
+		if time.Since(r.lastVoiceAt) < time.Duration(cfg.SilenceSecs*float64(time.Second)) {
+			return false
+		}
+		r.autoStopping = true
+		return true
+	}
+	r.mu.Lock()
+	r.lastVoiceAt = time.Now()
+	r.voiceSeconds += float64(len(pcm)) / float64(2*r.sampleRate)
+	r.mu.Unlock()
+	return false
+}
+
+func (r *recording) spokenSeconds() float64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.voiceSeconds
+}
+
+func hasVoice(pcm []byte, threshold int) bool {
+	if len(pcm) < 2 {
+		return false
+	}
+	var total int64
+	for i := 0; i+1 < len(pcm); i += 2 {
+		sample := int16(binary.LittleEndian.Uint16(pcm[i : i+2]))
+		if sample < 0 {
+			total -= int64(sample)
+		} else {
+			total += int64(sample)
+		}
+	}
+	return total/int64(len(pcm)/2) >= int64(threshold)
 }
 
 func (d *Daemon) Stop() error {
@@ -336,6 +419,16 @@ func (d *Daemon) stopRecording(r *recording, message string) error {
 	if info, err := os.Stat(job.AudioPath); err != nil || info.Size() < 3200 {
 		job.Status = StatusCancelled
 		job.Error = "No speech captured (very short recording)"
+		_ = d.store.Save(job)
+		_ = os.Remove(job.AudioPath)
+		d.setStatus("idle", "Ready")
+		return nil
+	} else {
+		job.RecordingSeconds = float64(info.Size()-44) / float64(2*d.cfg.SampleRate)
+	}
+	if r.handsFree && r.spokenSeconds() < d.cfg.HandsFree.MinSpeechSecs {
+		job.Status = StatusCancelled
+		job.Error = "No speech captured (hands-free minimum not reached)"
 		_ = d.store.Save(job)
 		_ = os.Remove(job.AudioPath)
 		d.setStatus("idle", "Ready")
@@ -653,7 +746,7 @@ func (d *Daemon) recoverInterruptedJobs() {
 				job.Error = "Recording interrupted before audio was captured"
 				_ = d.store.Save(job)
 			}
-		case StatusTranscribing, StatusCleaning:
+		case StatusTranscribing, StatusCleaning, StatusFormatting:
 			job.Status = StatusQueued
 			job.Error = "Recovered after service restart"
 			_ = d.store.Save(job)
@@ -718,6 +811,24 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		job.Error = "Cleanup skipped: " + cleanErr.Error()
 	}
 	text = d.vocabulary.Apply(text)
+	job.Formatting.Eligible = d.cfg.Formatter.Mode == "auto" && job.RecordingSeconds > d.cfg.Formatter.MinRecordingSecs
+	if job.Formatting.Eligible {
+		job.Status = StatusFormatting
+		_ = d.store.Save(job)
+		d.setStatus("processing", "Formatting")
+		formatCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.Formatter.TimeoutSecs)*time.Second)
+		formatted, formatErr := FormatWithOllama(formatCtx, text, job.Formatting.ContextHint, d.cfg.Formatter)
+		cancel()
+		if d.cancelledProcessing(ctx, job) {
+			return
+		}
+		if formatErr != nil {
+			job.Formatting.Skipped = formatErr.Error()
+		} else {
+			text = formatted
+			job.Formatting.Applied = true
+		}
+	}
 	job.FinalText = text
 	job.Status = StatusDelivering
 	_ = d.store.Save(job)
@@ -754,7 +865,11 @@ func (d *Daemon) process(ctx context.Context, id string) {
 	job.DeliveredAt = time.Now().UTC()
 	job.Error = ""
 	_ = d.store.Save(job)
-	d.showAction("delivered", "Inserted", job.ID, false)
+	message := "Inserted"
+	if job.Formatting.Eligible && !job.Formatting.Applied {
+		message = "Inserted — formatting skipped"
+	}
+	d.showAction("delivered", message, job.ID, false)
 }
 
 func (d *Daemon) cancelledProcessing(ctx context.Context, job *Job) bool {
@@ -842,11 +957,12 @@ func activeWindow() WindowTarget {
 		Address string `json:"address"`
 		Class   string `json:"class"`
 		Title   string `json:"title"`
+		PID     int    `json:"pid"`
 	}
 	if json.Unmarshal(b, &out) != nil {
 		return WindowTarget{}
 	}
-	return WindowTarget{Address: out.Address, Class: out.Class, Title: out.Title}
+	return WindowTarget{Address: out.Address, Class: out.Class, Title: out.Title, PID: out.PID}
 }
 func copyClipboard(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

@@ -10,19 +10,21 @@ import (
 )
 
 type Config struct {
-	DataDir          string        `json:"data_dir"`
-	StateDir         string        `json:"state_dir"`
-	RuntimeDir       string        `json:"runtime_dir"`
-	MicTarget        string        `json:"mic_target"`
-	SampleRate       int           `json:"sample_rate"`
-	SafeInsertion    bool          `json:"safe_insertion"`
-	FailedRetention  int           `json:"failed_audio_retention_days"`
-	HistoryRetention int           `json:"history_retention_days"`
-	Retry            RetryConfig   `json:"retry"`
-	ASR              ASRConfig     `json:"asr"`
-	Cleanup          CleanupConfig `json:"cleanup"`
-	UI               UIConfig      `json:"ui"`
-	Sound            SoundConfig   `json:"sound"`
+	DataDir          string          `json:"data_dir"`
+	StateDir         string          `json:"state_dir"`
+	RuntimeDir       string          `json:"runtime_dir"`
+	MicTarget        string          `json:"mic_target"`
+	SampleRate       int             `json:"sample_rate"`
+	SafeInsertion    bool            `json:"safe_insertion"`
+	FailedRetention  int             `json:"failed_audio_retention_days"`
+	HistoryRetention int             `json:"history_retention_days"`
+	Retry            RetryConfig     `json:"retry"`
+	ASR              ASRConfig       `json:"asr"`
+	Cleanup          CleanupConfig   `json:"cleanup"`
+	Formatter        FormatterConfig `json:"formatter"`
+	HandsFree        HandsFreeConfig `json:"hands_free"`
+	UI               UIConfig        `json:"ui"`
+	Sound            SoundConfig     `json:"sound"`
 }
 
 type RetryConfig struct {
@@ -49,6 +51,28 @@ type CleanupConfig struct {
 	APIKeyEnv string `json:"api_key_env"`
 	Endpoint  string `json:"endpoint"`
 	Model     string `json:"model"`
+}
+
+// FormatterConfig controls the optional, entirely local post-ASR formatting
+// pass. Mode is "auto" or "off". Keeping this distinct from Cleanup means
+// ElevenLabs can stay responsible for transcription cleanup while a local
+// model only structures longer dictations.
+type FormatterConfig struct {
+	Mode             string  `json:"mode"`
+	Endpoint         string  `json:"endpoint"`
+	Model            string  `json:"model"`
+	MinRecordingSecs float64 `json:"min_recording_seconds"`
+	TimeoutSecs      int     `json:"timeout_seconds"`
+	KeepAlive        string  `json:"keep_alive"`
+	ContextTokens    int     `json:"context_tokens"`
+	MaxOutputTokens  int     `json:"max_output_tokens"`
+}
+
+type HandsFreeConfig struct {
+	Enabled        bool    `json:"enabled"`
+	SilenceSecs    float64 `json:"silence_seconds"`
+	MinSpeechSecs  float64 `json:"min_speech_seconds"`
+	VoiceThreshold int     `json:"voice_threshold"`
 }
 
 type UIConfig struct {
@@ -83,10 +107,12 @@ func DefaultConfig() Config {
 		Retry: RetryConfig{MaxAttempts: 2, InitialSecs: 3, MaxSecs: 120},
 		// The release-only flow keeps the hotkey path local and instant: no network
 		// call can leave microphone capture stuck while the key is held.
-		ASR:     ASRConfig{Provider: "elevenlabs_batch", APIKeyEnv: "ELEVENLABS_API_KEY", Language: "eng", Secondary: []string{"hin"}, NoVerbatim: true, Model: "scribe_v2", Endpoint: "https://api.elevenlabs.io/v1/speech-to-text"},
-		Cleanup: CleanupConfig{Enabled: false, APIKeyEnv: "LLM_API_KEY", Endpoint: "", Model: ""},
-		UI:      UIConfig{Enabled: true},
-		Sound:   SoundConfig{Enabled: true},
+		ASR:       ASRConfig{Provider: "elevenlabs_batch", APIKeyEnv: "ELEVENLABS_API_KEY", Language: "eng", Secondary: []string{"hin"}, NoVerbatim: true, Model: "scribe_v2", Endpoint: "https://api.elevenlabs.io/v1/speech-to-text"},
+		Cleanup:   CleanupConfig{Enabled: false, APIKeyEnv: "LLM_API_KEY", Endpoint: "", Model: ""},
+		Formatter: FormatterConfig{Mode: "auto", Endpoint: "http://127.0.0.1:11434", Model: "qwen3:1.7b", MinRecordingSecs: 15, TimeoutSecs: 7, KeepAlive: "15m", ContextTokens: 2048, MaxOutputTokens: 320},
+		HandsFree: HandsFreeConfig{Enabled: true, SilenceSecs: 1.4, MinSpeechSecs: 0.4, VoiceThreshold: 650},
+		UI:        UIConfig{Enabled: true},
+		Sound:     SoundConfig{Enabled: true},
 	}
 }
 
@@ -120,6 +146,39 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.Retry.MaxSecs <= 0 {
 		cfg.Retry.MaxSecs = 120
+	}
+	if cfg.Formatter.Mode == "" {
+		cfg.Formatter.Mode = "auto"
+	}
+	if cfg.Formatter.Endpoint == "" {
+		cfg.Formatter.Endpoint = "http://127.0.0.1:11434"
+	}
+	if cfg.Formatter.Model == "" {
+		cfg.Formatter.Model = "qwen3:1.7b"
+	}
+	if cfg.Formatter.MinRecordingSecs <= 0 {
+		cfg.Formatter.MinRecordingSecs = 15
+	}
+	if cfg.Formatter.TimeoutSecs <= 0 {
+		cfg.Formatter.TimeoutSecs = 7
+	}
+	if cfg.Formatter.KeepAlive == "" {
+		cfg.Formatter.KeepAlive = "15m"
+	}
+	if cfg.Formatter.ContextTokens <= 0 {
+		cfg.Formatter.ContextTokens = 2048
+	}
+	if cfg.Formatter.MaxOutputTokens <= 0 {
+		cfg.Formatter.MaxOutputTokens = 320
+	}
+	if cfg.HandsFree.SilenceSecs <= 0 {
+		cfg.HandsFree.SilenceSecs = 1.4
+	}
+	if cfg.HandsFree.MinSpeechSecs <= 0 {
+		cfg.HandsFree.MinSpeechSecs = 0.4
+	}
+	if cfg.HandsFree.VoiceThreshold <= 0 {
+		cfg.HandsFree.VoiceThreshold = 650
 	}
 	return cfg, nil
 }

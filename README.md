@@ -55,7 +55,7 @@ should follow the commands above.
 
 ## Commands
 
-`dictationd toggle`, `dictationd cancel`, `dictationd retry-last`, `dictationd dismiss-last`,
+`dictationd toggle`, `dictationd handsfree-toggle`, `dictationd cancel`, `dictationd retry-last`, `dictationd dismiss-last`,
 `dictationd history`, and `dictationd status` all communicate with the same
 background daemon over a user-only Unix socket.
 
@@ -68,6 +68,43 @@ Press `Escape` to cancel an active recording; it is non-consuming while idle,
 so applications still receive their normal Escape keypress. The bottom overlay
 briefly offers Copy after every completed dictation and Retry after a failed
 transcription.
+
+`Super+Shift+Space` starts **hands-free** dictation: speak naturally, pause,
+and JFlow stops after sustained silence. It is not always listening. A very
+short accidental utterance is discarded, and `Escape` cancels safely.
+
+## Automatic local formatting
+
+JFlow formats recordings longer than 15 seconds after Scribe has returned its
+clean transcript. It uses local Qwen3 1.7B through Ollama; no extra cloud API
+key or ElevenLabs request is used.
+
+The formatter receives the transcript and, only when confidently inferred from
+the active window, one short local context hint such as “AI-assistant request”,
+“professional message”, or “casual message”. Raw window titles and process
+arguments never go to the model. If context is uncertain, formatting is neutral.
+The model is instructed to preserve meaning and requirements, rather than
+answering, expanding, or rewriting the request.
+
+Install Ollama using its official installer, then start its system service:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable --now ollama
+ollama pull qwen3:1.7b
+```
+
+On this RTX 2050 system, confirm GPU use after the first formatting request:
+
+```bash
+ollama ps
+```
+
+The processor must show `100% GPU`. JFlow pre-warms the model in the background
+after its service starts and keeps it warm for 15 minutes after use. If Ollama
+is unavailable, GPU loading fails, a request exceeds seven
+seconds, or the result does not safely preserve the original transcript, JFlow
+inserts the unformatted Scribe result and marks that fallback in History.
 
 ## JFlow Library
 

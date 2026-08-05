@@ -19,6 +19,17 @@
     "model": "scribe_v2"
   },
   "cleanup": { "enabled": false, "api_key_env": "LLM_API_KEY", "endpoint": "", "model": "" },
+  "formatter": {
+    "mode": "auto",
+    "endpoint": "http://127.0.0.1:11434",
+    "model": "qwen3:1.7b",
+    "min_recording_seconds": 15,
+    "timeout_seconds": 7,
+    "keep_alive": "15m",
+    "context_tokens": 2048,
+    "max_output_tokens": 320
+  },
+  "hands_free": { "enabled": true, "silence_seconds": 1.4, "min_speech_seconds": 0.4, "voice_threshold": 650 },
   "ui": { "enabled": true },
   "sound": { "enabled": true }
 }

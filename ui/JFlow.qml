@@ -80,6 +80,13 @@ FloatingWindow {
         return job.status === "failed" || job.status === "retry_wait"
     }
 
+    function formattingLabel(job) {
+        if (!job.formatting || !job.formatting.eligible) return ""
+        var hint = job.formatting.context_hint || ""
+        var context = hint.indexOf("AI-assistant") >= 0 ? "AI prompt" : hint.indexOf("professional") >= 0 ? "Professional" : hint.indexOf("casual") >= 0 ? "Casual" : "Neutral"
+        return context + " · " + (job.formatting.applied ? "formatted" : "original kept")
+    }
+
     Component.onCompleted: {
         refreshHistory()
         refreshVocabulary()
@@ -165,7 +172,7 @@ FloatingWindow {
                     spacing: 2
                     Text { text: "JFlow"; color: "#ffffff"; font.pixelSize: 28; font.weight: Font.DemiBold }
                     Text {
-                        text: root.page === 0 ? "Your local dictation history" : "Local corrections before text is inserted"
+                        text: root.page === 0 ? "Your local dictation history" : root.page === 1 ? "Local corrections before text is inserted" : "Automatic local formatting for longer dictations"
                         color: "#a8a8a8"
                         font.pixelSize: 13
                     }
@@ -186,7 +193,7 @@ FloatingWindow {
                 Layout.fillWidth: true
                 spacing: 8
                 Repeater {
-                    model: ["History", "Vocabulary"]
+                    model: ["History", "Vocabulary", "Formatting"]
                     delegate: Rectangle {
                         required property var modelData
                         required property int index
@@ -240,7 +247,7 @@ FloatingWindow {
                             Text { anchors.verticalCenter: parent.verticalCenter; anchors.right: parent.right; anchors.rightMargin: 14; text: "⌕"; color: "#c8c8c8"; font.pixelSize: 20 }
                         }
 
-                        Text { text: jobs.length + (jobs.length === 1 ? " dictation" : " dictations"); color: "#8e8e8e"; font.pixelSize: 12 }
+	                        Text { text: root.jobs.length + (root.jobs.length === 1 ? " dictation" : " dictations"); color: "#8e8e8e"; font.pixelSize: 12 }
 
                         ListView {
                             id: historyList
@@ -272,6 +279,13 @@ FloatingWindow {
                                         visible: !historyCard.editing
                                         text: root.preview(modelData); color: "#f2f2f2"; font.pixelSize: 14
                                         wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: !historyCard.editing && root.formattingLabel(modelData).length > 0
+                                        text: root.formattingLabel(modelData)
+                                        color: modelData.formatting && modelData.formatting.applied ? "#9fc9ab" : "#cdbb8d"
+                                        font.pixelSize: 11
                                     }
                                     Rectangle {
                                         visible: historyCard.editing
@@ -345,6 +359,25 @@ FloatingWindow {
                             }
                             Text { anchors.centerIn: parent; visible: vocabularyList.count === 0; text: "Add names and terms JFlow should write correctly"; color: "#777777"; font.pixelSize: 14 }
                         }
+                    }
+                }
+
+                Item {
+                    anchors.fill: parent
+                    visible: root.page === 2
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 16
+                        Text { text: "Automatic formatting"; color: "#ffffff"; font.pixelSize: 20; font.weight: Font.DemiBold }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "For recordings longer than 15 seconds, JFlow formats the finished Scribe transcript locally with Qwen3. Shorter dictations are inserted immediately."
+                            color: "#b5b5b5"; font.pixelSize: 14; wrapMode: Text.Wrap
+                        }
+                        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: "#292929" }
+                        Text { text: "Context is inferred locally from the active window. It supplies at most one short hint, such as AI prompt, professional message, or casual message. If JFlow is unsure, formatting stays neutral."; color: "#8c8c8c"; font.pixelSize: 13; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Text { text: "The model runs on your GPU when available. If it is unavailable, too slow, or returns an unsafe result, JFlow inserts the original Scribe text and records that fallback in History."; color: "#8c8c8c"; font.pixelSize: 13; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Item { Layout.fillHeight: true }
                     }
                 }
             }
