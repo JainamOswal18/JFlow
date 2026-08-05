@@ -34,8 +34,8 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	if !strings.Contains(got, "dark theme") {
 		t.Fatalf("formatted text = %q", got)
 	}
-	if strings.ContainsAny(got, "*#`") || strings.Contains(got, "- Use") {
-		t.Fatalf("formatter returned Markdown instead of plain text: %q", got)
+	if !strings.Contains(got, "**Build a landing page.**") || !strings.Contains(got, "- Use a dark theme") || strings.ContainsAny(got, "#`") {
+		t.Fatalf("formatter did not preserve approved plain-text structure: %q", got)
 	}
 	if result.Audit.HTTPStatus != http.StatusOK || result.Audit.Model != cfg.Model || result.Audit.RawResponse == "" || result.Audit.SystemPrompt == "" {
 		t.Fatalf("formatter audit is incomplete: %#v", result.Audit)
@@ -52,8 +52,16 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "Do not use Markdown") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source text") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "ALL-CAPS") {
 		t.Fatalf("unexpected system prompt: %q", system)
+	}
+}
+
+func TestNormalizePlainTextUsesReadableStructure(t *testing.T) {
+	got := normalizePlainText("# Summary\n* First item\n+ Second item\n**Keep bold**")
+	want := "SUMMARY\n- First item\n- Second item\n**Keep bold**"
+	if got != want {
+		t.Fatalf("normalized text = %q, want %q", got, want)
 	}
 }
 

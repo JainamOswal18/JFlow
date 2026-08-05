@@ -14,14 +14,14 @@ func InferContextHint(target WindowTarget) string {
 	meta := strings.ToLower(target.Class + " " + target.Title)
 	switch {
 	case containsAny(meta, "chatgpt", "claude", "gemini", "perplexity", "copilot"):
-		return "Likely context: an AI-assistant request. Prefer clear structure."
+		return "Active style: AI-assistant request. For multi-part requests, short ALL-CAPS headings, - or numbered lists, and **bold** are allowed when they improve clarity."
 	case containsAny(meta, "thunderbird", "gmail", "outlook"):
-		return "Likely context: a professional message. Keep an appropriate professional tone."
+		return "Active style: professional message. Keep an appropriate professional tone; use - or numbered lists and **bold** only when natural, never force structure on a short message."
 	case containsAny(meta, "slack", "discord", "telegram", "whatsapp", "signal"):
-		return "Likely context: a casual message. Preserve a relaxed tone."
+		return "Active style: casual message. Preserve a relaxed tone; use a list only for genuine items or steps, with no headings."
 	}
 	if isTerminal(target.Class) && terminalRunsAssistant(target.PID) {
-		return "Likely context: an AI-assistant request. Prefer clear structure."
+		return "Active style: AI-assistant request. For multi-part requests, short ALL-CAPS headings, - or numbered lists, and **bold** are allowed when they improve clarity."
 	}
 	return ""
 }

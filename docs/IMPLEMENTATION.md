@@ -78,6 +78,11 @@ so multiline formatter output stays in chat composers instead of submitting a
 message. Formatter output is constrained and normalized to plain text before
 insertion.
 
+The formatter uses readable text conventions rather than raw Markdown
+headings: ALL-CAPS headings, `-` or numbered lists, and optional `**bold**`
+when the selected local style permits it. Only the inferred active style is
+appended to the base formatter prompt.
+
 For every eligible formatting request, the job metadata records the local Qwen
 model, formatter input, exact system prompt, HTTP status, end-to-end latency,
 and raw Ollama response. This makes it possible to audit whether Qwen changed
