@@ -190,6 +190,10 @@ func (d *Daemon) handleConnection(c net.Conn) {
 			err = d.DeleteHistory(cmd.JobID)
 		case "correct-history":
 			err = d.CorrectHistory(cmd.JobID, cmd.Text)
+		case "learn-selection":
+			err = d.LearnSelection()
+		case "formatter-feedback":
+			err = d.SetFormatterFeedback(cmd.JobID, cmd.Text)
 		case "vocabulary":
 			resp.Vocabulary, err = d.vocabulary.List()
 		case "vocabulary-add":
@@ -635,7 +639,79 @@ func (d *Daemon) CorrectHistory(id, text string) error {
 		return err
 	}
 	job.FinalText = text
+	if job.Formatting.Eligible {
+		job.Formatting.Feedback = "corrected"
+	}
 	return d.store.Save(job)
+}
+
+// LearnSelection learns one close spelling/spacing correction from text the
+// user explicitly selected in their current app. It never watches the
+// clipboard or UI passively: this runs only through its explicit command or
+// hotkey. The latest delivered transcript is the only comparison source.
+func (d *Daemon) LearnSelection() error {
+	selected, err := readExplicitSelection()
+	if err != nil {
+		return err
+	}
+	jobs, err := d.store.List()
+	if err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		if job.Status != StatusDelivered || strings.TrimSpace(job.Transcript) == "" {
+			continue
+		}
+		learned, err := d.vocabulary.LearnFromSelection(job.Transcript, selected)
+		if err != nil {
+			return err
+		}
+		if !learned {
+			return errors.New("selected text is not a close spelling correction of the latest dictation")
+		}
+		d.setStatus("idle", "Learned selected vocabulary")
+		return nil
+	}
+	return errors.New("no delivered dictation is available to learn from")
+}
+
+func readExplicitSelection() (string, error) {
+	// Primary selection is Wayland's highlighted-text channel. Clipboard is
+	// only tried when the user deliberately copied the correction first.
+	for _, args := range [][]string{{"--primary", "--no-newline"}, {"--no-newline"}} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		out, err := exec.CommandContext(ctx, "wl-paste", args...).Output()
+		timedOut := ctx.Err() != nil
+		cancel()
+		if timedOut {
+			return "", errors.New("reading selected text timed out")
+		}
+		if text := strings.TrimSpace(string(out)); err == nil && text != "" {
+			return text, nil
+		}
+	}
+	return "", errors.New("select the corrected word or phrase first")
+}
+
+func (d *Daemon) SetFormatterFeedback(id, feedback string) error {
+	feedback = strings.TrimSpace(strings.ToLower(feedback))
+	if feedback != "helpful" && feedback != "needs_work" {
+		return errors.New("feedback must be helpful or needs_work")
+	}
+	job, err := d.store.Get(id)
+	if err != nil {
+		return err
+	}
+	if !job.Formatting.Eligible {
+		return errors.New("this dictation was not formatter-eligible")
+	}
+	job.Formatting.Feedback = feedback
+	return d.store.Save(job)
+}
+
+func usageForASR(cfg Config, seconds float64) ASRUsage {
+	provider := cfg.ASR.Provider
+	return ASRUsage{Provider: provider, Model: cfg.ASR.Model, Cloud: provider != "whisper_cli", AudioSeconds: seconds}
 }
 
 func (d *Daemon) CopyLast() error {
@@ -827,6 +903,7 @@ func (d *Daemon) process(ctx context.Context, id string) {
 			return
 		}
 		job.Transcript = text
+		job.Usage = usageForASR(requestCfg, job.RecordingSeconds)
 	}
 	job.Status = StatusCleaning
 	_ = d.store.Save(job)

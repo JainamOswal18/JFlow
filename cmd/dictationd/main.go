@@ -47,7 +47,7 @@ func main() {
 		if err := d.Run(ctx); err != nil {
 			fatal(err)
 		}
-	case "start", "stop", "toggle", "handsfree-start", "handsfree-toggle", "cancel", "cancel-if-recording", "retry-last", "dismiss-last", "copy-last", "status":
+	case "start", "stop", "toggle", "handsfree-start", "handsfree-toggle", "cancel", "cancel-if-recording", "retry-last", "dismiss-last", "copy-last", "learn-selection", "status":
 		callAndPrint(cfg, dictation.Command{Action: os.Args[1]})
 	case "copy":
 		if len(os.Args) != 3 {
@@ -85,6 +85,11 @@ func main() {
 			fatal(errors.New("usage: dictationd correct-history JOB_ID FINAL_TEXT"))
 		}
 		callAndPrint(cfg, dictation.Command{Action: "correct-history", JobID: os.Args[2], Text: os.Args[3]})
+	case "formatter-feedback":
+		if len(os.Args) != 4 {
+			fatal(errors.New("usage: dictationd formatter-feedback JOB_ID helpful|needs_work"))
+		}
+		callAndPrint(cfg, dictation.Command{Action: "formatter-feedback", JobID: os.Args[2], Text: os.Args[3]})
 	case "config-path":
 		fmt.Println(dictation.ConfigPath())
 	case "credentials-path":
@@ -152,5 +157,5 @@ func call(cfg dictation.Config, cmd dictation.Command) (dictation.Response, erro
 func printJSON(v any) { b, _ := json.MarshalIndent(v, "", "  "); fmt.Println(string(b)) }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "dictationd:", err); os.Exit(1) }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|handsfree-start|handsfree-toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|correct-history JOB_ID FINAL_TEXT|vocabulary|vocabulary-add WORD_OR_PHRASE|vocabulary-delete ENTRY_ID|library>")
+	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|handsfree-start|handsfree-toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|learn-selection|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|correct-history JOB_ID FINAL_TEXT|formatter-feedback JOB_ID helpful|needs_work|vocabulary|vocabulary-add WORD_OR_PHRASE|vocabulary-delete ENTRY_ID|library>")
 }

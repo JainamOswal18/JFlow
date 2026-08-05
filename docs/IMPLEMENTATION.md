@@ -38,8 +38,8 @@ dictation.
   one locally inferred context hint; raw titles never enter the model prompt.
 - Tap-to-dictate is available separately from the hold binding. It ends after
   sustained local silence and never keeps the microphone always on.
-- Hyprland hold/release binding for `Super+R` and a recovery binding on
-  `Super+Shift+V`.
+- Hyprland hold/release binding for `Super+R`, recovery on `Super+Shift+V`,
+  and explicit selection learning on `Super+Alt+V`.
 - User-level systemd units for the daemon and indicator.
 
 ## Why these choices
@@ -140,7 +140,12 @@ included in Scribe v2 keyterm prompting (up to 100, avoiding Scribe's larger
 vocabulary minimum-duration tier); only learned aliases are matched locally as
 case-insensitive whole phrases after transcription and before insertion.
 Editing a saved transcript in History compares close spelling/spacing variants
-and adds local aliases such as `Jay Nam Oswal → Jainam Oswal`.
+and adds local aliases such as `Jay Nam Oswal → Jainam Oswal`. The Library also
+has an explicit **Learn selected correction** action (`Super+Alt+V`): select a
+corrected word or phrase in the target app, trigger it, and JFlow compares only
+that text with the latest delivered raw transcript. It accepts one close 1–5
+word spelling/spacing match and never passively observes a clipboard or app
+edits.
 
 ## First-use steps
 
@@ -258,11 +263,16 @@ locally persisted during capture; after speech has begun, 1.4 seconds of local
 silence ends capture. Escape cancellation and all normal retry semantics stay
 unchanged.
 
-## Future enhancement: learn from an edited selection
+## Formatter audits, feedback, and provider visibility
 
-Wayland applications do not expose arbitrary in-app text edits to other
-clients. Add an explicit **Learn selection** hotkey instead: after editing a
-JFlow insertion in any application, select the corrected phrase and invoke the
-hotkey. JFlow can compare that user-provided selection with the last raw Scribe
-transcript and update the local alias vocabulary. This avoids opening History
-without silently monitoring other applications or their clipboards.
+The JFlow Library **Insights** tab exposes the complete locally retained audit
+for every formatter-eligible dictation: Scribe input, final inserted text,
+model, latency, HTTP status, active style hint, exact system prompt, raw Qwen
+response, deterministic preprocessing, and any formatter error. Useful / Needs
+work feedback and History corrections are saved beside that audit for later
+evaluation. This does not alter the current formatter failure behavior.
+
+Insights also totals recorded cloud and local ASR audio seconds from new jobs.
+It intentionally does not estimate currency: provider plan allowances and
+pricing are account-specific. The view is read-only and never switches an ASR
+provider or submits an extra transcription.

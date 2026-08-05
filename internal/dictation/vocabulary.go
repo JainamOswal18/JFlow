@@ -312,6 +312,42 @@ func (s *VocabularyStore) LearnFromCorrection(raw, corrected string) (int, error
 	return learned, nil
 }
 
+// LearnFromSelection is the deliberately narrow counterpart to a full History
+// correction. A user-selected spelling can learn only one nearby 1-5 word
+// phrase from the latest raw transcript, never an unrelated semantic rewrite.
+func (s *VocabularyStore) LearnFromSelection(raw, selected string) (bool, error) {
+	selected = strings.TrimSpace(selected)
+	selectedWords := strings.Fields(selected)
+	if len(selectedWords) == 0 || len(selectedWords) > 5 {
+		return false, errors.New("select one word or a phrase of up to five words")
+	}
+	canonical := strings.Join(selectedWords, " ")
+	compactCanonical := compactVocabularyText(canonical)
+	if len([]rune(compactCanonical)) < 4 {
+		return false, errors.New("selected correction is too short to learn safely")
+	}
+	rawWords := strings.Fields(raw)
+	bestAlias, bestScore := "", 0.0
+	for length := 1; length <= 5; length++ {
+		for start := 0; start+length <= len(rawWords); start++ {
+			alias := strings.Join(rawWords[start:start+length], " ")
+			compactAlias := compactVocabularyText(alias)
+			if compactAlias == "" || compactAlias == compactCanonical {
+				continue
+			}
+			score := similarity(compactCanonical, compactAlias)
+			if score > bestScore || (score == bestScore && len(alias) < len(bestAlias)) {
+				bestAlias, bestScore = alias, score
+			}
+		}
+	}
+	if bestScore < 0.80 {
+		return false, nil
+	}
+	_, err := s.LearnAlias(canonical, bestAlias)
+	return err == nil, err
+}
+
 func containsWholePhrase(text, phrase string) bool {
 	return strings.Contains(" "+compactVocabularyText(text)+" ", " "+compactVocabularyText(phrase)+" ")
 }

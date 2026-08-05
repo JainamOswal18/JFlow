@@ -81,3 +81,28 @@ func TestVocabularyLearnFromCorrectionFindsSpacingVariant(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestVocabularyLearnFromSelectionFindsOnlyClosePhrase(t *testing.T) {
+	s := NewVocabularyStore(filepath.Join(t.TempDir(), "vocabulary.json"))
+	learned, err := s.LearnFromSelection("Hi, I'm Jay Nam Oswal", "Jainam Oswal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !learned {
+		t.Fatal("expected selected correction to be learned")
+	}
+	if got := s.Apply("jay nam oswal"); got != "Jainam Oswal" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestVocabularyLearnFromSelectionRejectsUnrelatedText(t *testing.T) {
+	s := NewVocabularyStore(filepath.Join(t.TempDir(), "vocabulary.json"))
+	learned, err := s.LearnFromSelection("Please open JFlow settings", "Completely unrelated phrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if learned {
+		t.Fatal("unrelated selection must not become vocabulary")
+	}
+}

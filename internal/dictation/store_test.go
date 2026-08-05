@@ -26,6 +26,17 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUsageForASRMarksOnlyWhisperAsLocal(t *testing.T) {
+	cloud := usageForASR(Config{ASR: ASRConfig{Provider: "elevenlabs_batch", Model: "scribe_v2"}}, 12.5)
+	if !cloud.Cloud || cloud.AudioSeconds != 12.5 {
+		t.Fatalf("unexpected cloud usage: %#v", cloud)
+	}
+	local := usageForASR(Config{ASR: ASRConfig{Provider: "whisper_cli"}}, 8)
+	if local.Cloud {
+		t.Fatalf("unexpected local usage: %#v", local)
+	}
+}
+
 func TestStoreSearchAndRejectsUnsafeDelete(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(dir)

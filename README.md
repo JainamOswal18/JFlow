@@ -55,7 +55,7 @@ should follow the commands above.
 
 ## Commands
 
-`dictationd toggle`, `dictationd handsfree-toggle`, `dictationd cancel`, `dictationd retry-last`, `dictationd dismiss-last`,
+`dictationd toggle`, `dictationd handsfree-toggle`, `dictationd cancel`, `dictationd retry-last`, `dictationd dismiss-last`, `dictationd learn-selection`,
 `dictationd history`, and `dictationd status` all communicate with the same
 background daemon over a user-only Unix socket.
 
@@ -126,6 +126,13 @@ closing it can never interrupt an active dictation. The Library lets you:
 - Copy a specific transcript, retry a failed recording, or delete an item.
 - Add a canonical name or term once; JFlow sends that spelling to Scribe as a
   keyterm and learns local aliases from History corrections.
+- Select a correction in any app and use **Learn selected correction** in the
+  Library, or `Super+Alt+V`, to learn a close spelling/spacing alias without
+  opening History. This is explicit only: JFlow never monitors your edits or
+  clipboard in the background.
+- Inspect formatter input, raw Qwen response, system prompt, latency, and
+  final inserted text in the **Insights** tab. Mark an output Useful or Needs
+  work; this local feedback is retained with the audit.
 
 Canonical vocabulary terms are sent to ElevenLabs Scribe v2 as keyterms, which
 adds ElevenLabs' keyterm surcharge to transcription requests. Learned aliases
@@ -134,8 +141,16 @@ transcription, and are never sent to ElevenLabs. Correct a saved History item
 to let JFlow learn close spelling or spacing variants such as
 `Jay Nam Oswal → Jainam Oswal`.
 
-The optional `Super+Shift+H` binding in
-`integrations/hypr/keybinds.lua` opens the Library directly.
+`Super+Shift+H` opens the Library directly. `Super+Alt+V` learns the currently
+selected correction from the latest delivered dictation.
+
+## Provider and cost visibility
+
+The Insights tab reports recorded **cloud audio seconds**, not a guessed bill:
+ElevenLabs allowances and pricing are account-specific and can change. It never
+makes a second transcription request, changes your provider, or silently falls
+back to a cloud provider. `elevenlabs_batch` and `sarvam` are counted as cloud;
+`whisper_cli` is counted as local when you explicitly configure it.
 
 ## Sounds
 

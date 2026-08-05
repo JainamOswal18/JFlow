@@ -40,6 +40,19 @@ type FormattingInfo struct {
 	LatencyMS       int64    `json:"latency_ms,omitempty"`
 	RawResponse     string   `json:"raw_response,omitempty"`
 	Skipped         string   `json:"skipped,omitempty"`
+	// Feedback is a local user signal for reviewing formatter quality. It never
+	// changes delivery behavior and is intentionally separate from Skipped.
+	Feedback string `json:"feedback,omitempty"`
+}
+
+// ASRUsage records observable provider usage, not a guessed currency amount.
+// Provider pricing and plan allowances change independently, so cloud seconds
+// are the only honest, useful local cost-control metric.
+type ASRUsage struct {
+	Provider     string  `json:"provider,omitempty"`
+	Model        string  `json:"model,omitempty"`
+	Cloud        bool    `json:"cloud"`
+	AudioSeconds float64 `json:"audio_seconds,omitempty"`
 }
 
 type Job struct {
@@ -58,6 +71,7 @@ type Job struct {
 	DeliveryAttempted bool           `json:"delivery_attempted"`
 	ClipboardBackup   bool           `json:"clipboard_backup"`
 	RecordingSeconds  float64        `json:"recording_seconds,omitempty"`
+	Usage             ASRUsage       `json:"usage,omitempty"`
 	Formatting        FormattingInfo `json:"formatting,omitempty"`
 }
 
