@@ -221,21 +221,15 @@ not summarize, translate, or invent text.
 An end-to-end transcription was intentionally not sent: no API key was placed
 in the credential file during implementation.
 
-## Next steps
+## Optional future research
 
-1. Deploy this branch, then confirm a real dictation appears in the Library and
-   test Copy, Retry on a deliberately failed item, Delete, and one vocabulary
-   correction.
-2. Benchmark Scribe against Sarvam using 15–20 of your own English-first,
-   Indian-accent sentences with names, technical terms, occasional Hinglish,
-   corrections, and noisy-room samples. Choose one primary provider rather
-   than chaining ASR systems.
-3. Add only frequent names, project terms, and commands through the Library.
-   They become paid Scribe keyterms; aliases learned from corrections remain
-   local and cost nothing extra.
-4. Decide whether cleanup is needed after testing Scribe's `no_verbatim` mode.
-   If enabled, test it carefully with technical text and code-related speech.
-5. Phase 3 can add optional per-app profiles and hands-free mode.
+The installed product is complete without another provider or cleanup model.
+If a different local formatter is installed later, `formatter-dataset` exposes
+only user-reviewed local examples and `formatter-benchmark MODEL [MODEL...]`
+compares it with the current model while JFlow is idle. The command reports
+outputs and latency but never chooses a model, alters history, or uses cloud
+credits. A cloud-provider accuracy comparison remains a human quality decision
+because it requires your own speech samples and provider account access.
 
 ## Phase 3: automatic context and local formatting
 
@@ -276,3 +270,15 @@ Insights also totals recorded cloud and local ASR audio seconds from new jobs.
 It intentionally does not estimate currency: provider plan allowances and
 pricing are account-specific. The view is read-only and never switches an ASR
 provider or submits an extra transcription.
+
+## End-to-end validation
+
+`pipeline_e2e_test.go` launches a real JFlow daemon with a temporary Unix
+socket, durable job store, fake Scribe endpoint, fake local Ollama endpoint,
+and fake Hyprland/wtype commands. It verifies the complete release path:
+transcription, formatting, raw audit capture, literal multiline insertion,
+feedback, reviewed dataset export, local benchmark execution, and explicit
+selection-based vocabulary learning. A separate end-to-end case locks in the
+chosen formatter failure behavior: Scribe text is delivered unchanged when
+Qwen is unavailable. The test has no external network, microphone, clipboard,
+or API-credit use.

@@ -90,6 +90,13 @@ func main() {
 			fatal(errors.New("usage: dictationd formatter-feedback JOB_ID helpful|needs_work"))
 		}
 		callAndPrint(cfg, dictation.Command{Action: "formatter-feedback", JobID: os.Args[2], Text: os.Args[3]})
+	case "formatter-dataset":
+		callAndPrint(cfg, dictation.Command{Action: "formatter-dataset"})
+	case "formatter-benchmark":
+		if len(os.Args) < 3 {
+			fatal(errors.New("usage: dictationd formatter-benchmark MODEL [MODEL...]"))
+		}
+		callAndPrint(cfg, dictation.Command{Action: "formatter-benchmark", Text: strings.Join(os.Args[2:], " ")})
 	case "config-path":
 		fmt.Println(dictation.ConfigPath())
 	case "credentials-path":
@@ -157,5 +164,5 @@ func call(cfg dictation.Config, cmd dictation.Command) (dictation.Response, erro
 func printJSON(v any) { b, _ := json.MarshalIndent(v, "", "  "); fmt.Println(string(b)) }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "dictationd:", err); os.Exit(1) }
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|handsfree-start|handsfree-toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|learn-selection|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|correct-history JOB_ID FINAL_TEXT|formatter-feedback JOB_ID helpful|needs_work|vocabulary|vocabulary-add WORD_OR_PHRASE|vocabulary-delete ENTRY_ID|library>")
+	fmt.Fprintln(os.Stderr, "usage: dictationd <init|daemon|start|stop|toggle|handsfree-start|handsfree-toggle|cancel|cancel-if-recording|retry-last|dismiss-last|copy-last|learn-selection|copy JOB_ID|retry JOB_ID|status|history [QUERY]|delete-history JOB_ID|correct-history JOB_ID FINAL_TEXT|formatter-feedback JOB_ID helpful|needs_work|formatter-dataset|formatter-benchmark MODEL [MODEL...]|vocabulary|vocabulary-add WORD_OR_PHRASE|vocabulary-delete ENTRY_ID|library>")
 }

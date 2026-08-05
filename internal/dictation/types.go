@@ -55,6 +55,30 @@ type ASRUsage struct {
 	AudioSeconds float64 `json:"audio_seconds,omitempty"`
 }
 
+// FormatterDatasetEntry is a user-reviewed local example suitable for a
+// manual local-model comparison. It never contains audio or credentials and
+// is not uploaded by JFlow.
+type FormatterDatasetEntry struct {
+	JobID       string `json:"job_id"`
+	Input       string `json:"input"`
+	Expected    string `json:"expected"`
+	ContextHint string `json:"context_hint,omitempty"`
+	Feedback    string `json:"feedback"`
+}
+
+type FormatterBenchmarkCase struct {
+	JobID     string `json:"job_id"`
+	Output    string `json:"output,omitempty"`
+	LatencyMS int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+type FormatterBenchmark struct {
+	Model            string                   `json:"model"`
+	Cases            []FormatterBenchmarkCase `json:"cases"`
+	AverageLatencyMS int64                    `json:"average_latency_ms,omitempty"`
+}
+
 type Job struct {
 	ID                string         `json:"id"`
 	Status            JobStatus      `json:"status"`

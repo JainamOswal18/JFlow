@@ -152,6 +152,21 @@ makes a second transcription request, changes your provider, or silently falls
 back to a cloud provider. `elevenlabs_batch` and `sarvam` are counted as cloud;
 `whisper_cli` is counted as local when you explicitly configure it.
 
+## Local formatter evaluation
+
+JFlow builds a private test set from formatter outputs you mark **Useful** and
+History items you correct. It does not collect examples silently or upload them.
+When you deliberately install another Ollama model, compare it locally with:
+
+```bash
+dictationd formatter-dataset
+dictationd formatter-benchmark qwen3:1.7b llama3.2:1b
+```
+
+The benchmark is refused while JFlow is recording or processing. It reports
+each model's output and latency for review; it never selects a model, changes
+history, or uses any cloud transcription credits.
+
 ## Sounds
 
 ```json

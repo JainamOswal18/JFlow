@@ -13,6 +13,7 @@ type Config struct {
 	DataDir          string          `json:"data_dir"`
 	StateDir         string          `json:"state_dir"`
 	RuntimeDir       string          `json:"runtime_dir"`
+	VocabularyFile   string          `json:"vocabulary_path,omitempty"`
 	MicTarget        string          `json:"mic_target"`
 	SampleRate       int             `json:"sample_rate"`
 	SafeInsertion    bool            `json:"safe_insertion"`
@@ -254,6 +255,9 @@ func (c Config) StatusPath() string       { return filepath.Join(c.RuntimeDir, "
 func (c Config) JobsDir() string          { return filepath.Join(c.DataDir, "jobs") }
 func (c Config) LangfuseQueueDir() string { return filepath.Join(c.StateDir, "langfuse", "pending") }
 func (c Config) VocabularyPath() string {
+	if c.VocabularyFile != "" {
+		return c.VocabularyFile
+	}
 	return filepath.Join(defaultBase("XDG_CONFIG_HOME", ".config"), "dictationd", "vocabulary.json")
 }
 func (c Config) LibraryUIPath() string          { return filepath.Join(c.DataDir, "ui", "JFlow.qml") }

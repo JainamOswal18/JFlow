@@ -116,11 +116,13 @@ type Command struct {
 	Text        string `json:"text,omitempty"`
 }
 type Response struct {
-	OK         bool              `json:"ok"`
-	Error      string            `json:"error,omitempty"`
-	Status     Status            `json:"status"`
-	Jobs       []*Job            `json:"jobs,omitempty"`
-	Vocabulary []VocabularyEntry `json:"vocabulary,omitempty"`
+	OK         bool                    `json:"ok"`
+	Error      string                  `json:"error,omitempty"`
+	Status     Status                  `json:"status"`
+	Jobs       []*Job                  `json:"jobs,omitempty"`
+	Vocabulary []VocabularyEntry       `json:"vocabulary,omitempty"`
+	Dataset    []FormatterDatasetEntry `json:"dataset,omitempty"`
+	Benchmarks []FormatterBenchmark    `json:"benchmarks,omitempty"`
 }
 
 func SendCommand(socket string, cmd Command) (Response, error) {
@@ -194,6 +196,10 @@ func (d *Daemon) handleConnection(c net.Conn) {
 			err = d.LearnSelection()
 		case "formatter-feedback":
 			err = d.SetFormatterFeedback(cmd.JobID, cmd.Text)
+		case "formatter-dataset":
+			resp.Dataset, err = d.FormatterDataset()
+		case "formatter-benchmark":
+			resp.Benchmarks, err = d.BenchmarkFormatter(strings.Fields(cmd.Text))
 		case "vocabulary":
 			resp.Vocabulary, err = d.vocabulary.List()
 		case "vocabulary-add":
@@ -707,6 +713,93 @@ func (d *Daemon) SetFormatterFeedback(id, feedback string) error {
 	}
 	job.Formatting.Feedback = feedback
 	return d.store.Save(job)
+}
+
+// FormatterDataset returns only examples the user has explicitly endorsed or
+// corrected. It is local output for comparing local Ollama models; it never
+// writes back to jobs, starts during dictation, or queues Langfuse telemetry.
+func (d *Daemon) FormatterDataset() ([]FormatterDatasetEntry, error) {
+	jobs, err := d.store.List()
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]FormatterDatasetEntry, 0)
+	for _, job := range jobs {
+		f := job.Formatting
+		if !f.Eligible || (f.Feedback != "helpful" && f.Feedback != "corrected") {
+			continue
+		}
+		input := strings.TrimSpace(f.InputText)
+		if input == "" {
+			input = strings.TrimSpace(job.Transcript)
+		}
+		expected := strings.TrimSpace(job.FinalText)
+		if input == "" || expected == "" {
+			continue
+		}
+		entries = append(entries, FormatterDatasetEntry{JobID: job.ID, Input: input, Expected: expected, ContextHint: f.ContextHint, Feedback: f.Feedback})
+	}
+	return entries, nil
+}
+
+// BenchmarkFormatter runs an explicit, local-only comparison against the
+// reviewed dataset. It is refused while dictation is active so a benchmark can
+// never delay recording, transcription, or delivery. Model outputs are merely
+// reported for review: JFlow does not auto-select a model or rewrite history.
+func (d *Daemon) BenchmarkFormatter(models []string) ([]FormatterBenchmark, error) {
+	if len(models) == 0 {
+		return nil, errors.New("provide one or more local Ollama model names")
+	}
+	if d.isRecording() {
+		return nil, errors.New("cannot benchmark while dictating")
+	}
+	d.mu.Lock()
+	processing := d.processingID != ""
+	d.mu.Unlock()
+	if processing {
+		return nil, errors.New("cannot benchmark while JFlow is processing a dictation")
+	}
+	dataset, err := d.FormatterDataset()
+	if err != nil {
+		return nil, err
+	}
+	if len(dataset) == 0 {
+		return nil, errors.New("no reviewed formatter examples yet; mark outputs Useful or save a History correction first")
+	}
+	benchmarks := make([]FormatterBenchmark, 0, len(models))
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		cfg := d.cfg.Formatter
+		cfg.Mode = "auto"
+		cfg.Model = model
+		benchmark := FormatterBenchmark{Model: model, Cases: make([]FormatterBenchmarkCase, 0, len(dataset))}
+		var totalLatency int64
+		var completed int64
+		for _, entry := range dataset {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSecs)*time.Second)
+			result, formatErr := FormatWithOllama(ctx, entry.Input, entry.ContextHint, cfg)
+			cancel()
+			item := FormatterBenchmarkCase{JobID: entry.JobID, Output: result.Text, LatencyMS: result.Audit.LatencyMS}
+			if formatErr != nil {
+				item.Error = formatErr.Error()
+			} else {
+				totalLatency += item.LatencyMS
+				completed++
+			}
+			benchmark.Cases = append(benchmark.Cases, item)
+		}
+		if completed > 0 {
+			benchmark.AverageLatencyMS = totalLatency / completed
+		}
+		benchmarks = append(benchmarks, benchmark)
+	}
+	if len(benchmarks) == 0 {
+		return nil, errors.New("provide one or more local Ollama model names")
+	}
+	return benchmarks, nil
 }
 
 func usageForASR(cfg Config, seconds float64) ASRUsage {

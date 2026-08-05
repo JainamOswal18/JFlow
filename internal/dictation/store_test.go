@@ -37,6 +37,13 @@ func TestUsageForASRMarksOnlyWhisperAsLocal(t *testing.T) {
 	}
 }
 
+func TestConfigVocabularyPathPrefersExplicitPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test-vocabulary.json")
+	if got := (Config{VocabularyFile: path}).VocabularyPath(); got != path {
+		t.Fatalf("vocabulary path = %q, want %q", got, path)
+	}
+}
+
 func TestStoreSearchAndRejectsUnsafeDelete(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(dir)
