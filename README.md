@@ -86,6 +86,10 @@ the exact Ollama response body, model, effective system prompt, input text,
 HTTP status, and end-to-end local request latency. It follows the same history
 retention period as that job.
 
+When a dictation explicitly says “first”, “second”, “third”, and so on, JFlow
+locally converts that sequence into a numbered list before Qwen formats it. The
+job audit records this deterministic `spoken_ordinals_to_numbered_list` rule.
+
 The formatter receives the transcript and, only when confidently inferred from
 the active window, one short local context hint such as “AI-assistant request”,
 “professional message”, or “casual message”. Raw window titles and process

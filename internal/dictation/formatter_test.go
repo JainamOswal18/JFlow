@@ -65,6 +65,17 @@ func TestNormalizePlainTextUsesReadableStructure(t *testing.T) {
 	}
 }
 
+func TestNormalizeSpokenOrdinals(t *testing.T) {
+	got, applied := normalizeSpokenOrdinals("All right. The first thing I want you to do is help me with it. Second is to identify the issue, and third is to brainstorm it.")
+	want := "1. Help me with it.\n2. Identify the issue.\n3. Brainstorm it."
+	if !applied || got != want {
+		t.Fatalf("ordinal normalization = %q, applied=%v; want %q", got, applied, want)
+	}
+	if _, applied := normalizeSpokenOrdinals("The first draft was better than the second draft."); applied {
+		t.Fatal("comparison text must not be treated as a spoken task list")
+	}
+}
+
 func TestFreshFormattingInfoClearsOldAttemptState(t *testing.T) {
 	previous := FormattingInfo{
 		Eligible: true, Applied: true, Changed: true, ContextHint: "Likely context: an AI-assistant request.",

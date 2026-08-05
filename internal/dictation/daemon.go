@@ -848,11 +848,18 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		_ = d.store.Save(job)
 		d.setStatus("processing", "Formatting")
 		formatCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.Formatter.TimeoutSecs)*time.Second)
-		beforeFormatting := text
+		originalText := text
+		beforeFormatting := originalText
+		preprocessRules := []string(nil)
+		if normalized, applied := normalizeSpokenOrdinals(beforeFormatting); applied {
+			beforeFormatting = normalized
+			preprocessRules = []string{"spoken_ordinals_to_numbered_list"}
+		}
 		result, formatErr := FormatWithOllama(formatCtx, beforeFormatting, job.Formatting.ContextHint, d.cfg.Formatter)
 		cancel()
 		job.Formatting = result.Audit
 		job.Formatting.Eligible = true
+		job.Formatting.PreprocessRules = preprocessRules
 		if d.cancelledProcessing(ctx, job) {
 			return
 		}
@@ -861,7 +868,7 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		} else {
 			text = result.Text
 			job.Formatting.Applied = true
-			job.Formatting.Changed = text != beforeFormatting
+			job.Formatting.Changed = text != originalText
 		}
 	}
 	job.FinalText = text
