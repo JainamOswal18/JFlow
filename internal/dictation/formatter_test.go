@@ -52,8 +52,12 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source text") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "MUST express them as a list") || !strings.Contains(system, "ALL-CAPS") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source text") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "Never summarize") || !strings.Contains(system, "MUST express them as a list") || !strings.Contains(system, "ALL-CAPS") {
 		t.Fatalf("unexpected system prompt: %q", system)
+	}
+	user := messages[1].(map[string]any)["content"].(string)
+	if !strings.Contains(user, "FORMAT ONLY THE QUOTED SOURCE DATA") || !strings.Contains(user, "<SOURCE>") || !strings.Contains(user, "Build a landing page use a dark theme") {
+		t.Fatalf("source text was not safely wrapped: %q", user)
 	}
 }
 
