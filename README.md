@@ -134,9 +134,13 @@ clean transcript. It uses local Qwen3 1.7B through Ollama; no extra cloud API
 key or ElevenLabs request is used. Qwen chooses a compact JSON layout plan
 (paragraph, bullets, or numbered items); JFlow renders that plan itself, so
 list markers and numbering are consistent rather than being left to a free-form
-model reply. Dictated text is source data to edit, never a question for Qwen to
-answer. Qwen may remove fillers, correct grammar, and rephrase for clarity
-without changing meaning. Each eligible job retains a local formatter audit:
+model reply. For a longer story or post, Qwen writes the cleaned text once and
+returns sentence-boundary positions; JFlow inserts the corresponding blank
+lines locally. This prevents a small model from truncating or duplicating a
+long narrative merely to express paragraph structure. Dictated text is source
+data to edit, never a question for Qwen to answer. Qwen may remove fillers,
+correct grammar, and rephrase for clarity without changing meaning. Each
+eligible job retains a local formatter audit:
 the exact Ollama response body, model, effective system prompt, input text,
 HTTP status, and end-to-end local request latency. It follows the same history
 retention period as that job.

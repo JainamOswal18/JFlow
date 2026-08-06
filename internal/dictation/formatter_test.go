@@ -21,7 +21,7 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"{\"layout\":\"bullets\",\"paragraph\":\"\",\"prefix\":\"Build a landing page.\",\"items\":[\"- Use a dark theme\",\"Include pricing\"],\"suffix\":\"\"}"}}`)), Header: make(http.Header)}, nil
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"{\"layout\":\"bullets\",\"content\":[\"- Use a dark theme\",\"Include pricing\"],\"break_after\":[]}"}}`)), Header: make(http.Header)}, nil
 	})}
 	defer func() { formatterHTTPClient = oldClient }()
 	cfg := DefaultConfig().Formatter
@@ -34,7 +34,7 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	if !strings.Contains(got, "dark theme") {
 		t.Fatalf("formatted text = %q", got)
 	}
-	if !strings.Contains(got, "Build a landing page:") || !strings.Contains(got, "- Use a dark theme") || strings.ContainsAny(got, "#`") {
+	if !strings.Contains(got, "- Use a dark theme") || strings.ContainsAny(got, "#`") {
 		t.Fatalf("formatter did not preserve approved plain-text structure: %q", got)
 	}
 	if result.Audit.HTTPStatus != http.StatusOK || result.Audit.Model != cfg.Model || result.Audit.RawResponse == "" || result.Audit.SystemPrompt == "" {
@@ -51,12 +51,12 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 		t.Fatalf("expected a strict JSON formatter contract: %#v", format)
 	}
 	properties := format["properties"].(map[string]any)
-	if properties["layout"] == nil || properties["items"] == nil {
+	if properties["layout"] == nil || properties["content"] == nil || properties["break_after"] == nil {
 		t.Fatalf("expected structural formatter plan: %#v", format)
 	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "JSON layout plan") || !strings.Contains(system, "comma-and conjunctions") || !strings.Contains(system, "grammatical person") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "JSON layout plan") || !strings.Contains(system, "break_after") || !strings.Contains(system, "grammatical person") {
 		t.Fatalf("unexpected system prompt: %q", system)
 	}
 	user := messages[1].(map[string]any)["content"].(string)
@@ -67,19 +67,63 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	if !strings.Contains(ordered, "STRUCTURE REQUIREMENT") || !strings.Contains(ordered, "layout to numbered") {
 		t.Fatalf("explicit source ordering was not preserved in metadata: %q", ordered)
 	}
+	narrative := formatterSourceMessage("I moved to Linux. I missed a writing tool. Nothing comparable existed. So I built one. Meet JFlow.")
+	if !strings.Contains(narrative, "multi-beat spoken monologue") || !strings.Contains(narrative, "layout to paragraph") || !strings.Contains(narrative, "break_after") {
+		t.Fatalf("long narrative was not given paragraph metadata: %q", narrative)
+	}
 }
 
 func TestRenderFormatterPlan(t *testing.T) {
-	got, err := renderFormatterPlan(formatterPlan{Layout: "bullets", Prefix: "I need", Items: []string{"- a fast local formatter", "accurate transcription", "reliable retries"}})
+	got, err := renderFormatterPlan(formatterPlan{Layout: "bullets", Content: []string{"- a fast local formatter", "accurate transcription", "reliable retries"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "I need:\n- a fast local formatter\n- accurate transcription\n- reliable retries"
+	want := "- a fast local formatter\n- accurate transcription\n- reliable retries"
 	if got != want {
 		t.Fatalf("rendered plan = %q, want %q", got, want)
 	}
-	if _, err := renderFormatterPlan(formatterPlan{Layout: "numbered", Items: []string{"only one"}}); err == nil {
+	if _, err := renderFormatterPlan(formatterPlan{Layout: "numbered", Content: []string{"only one"}}); err == nil {
 		t.Fatal("single-item list must be rejected")
+	}
+	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"I switched back to Linux. Meet JFlow. Hold a key, speak, release."}, BreakAfter: []int{1, 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "I switched back to Linux.\n\nMeet JFlow.\n\nHold a key, speak, release."
+	if got != want {
+		t.Fatalf("rendered paragraph group = %q, want %q", got, want)
+	}
+	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"First sentence.", "Second sentence.", "Third sentence."}, BreakAfter: []int{2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "First sentence. Second sentence.\n\nThird sentence."
+	if got != want {
+		t.Fatalf("rendered paragraph boundaries = %q, want %q", got, want)
+	}
+	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"I moved to Linux. Nothing comparable existed. Meet JFlow. Hold a key, speak, release."}, BreakAfter: []int{2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "I moved to Linux. Nothing comparable existed.\n\nMeet JFlow.\n\nHold a key, speak, release."
+	if got != want {
+		t.Fatalf("rendered standalone callout = %q, want %q", got, want)
+	}
+	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"Meet JFlow. Hold a key, speak, release. Clean text lands here."}, BreakAfter: []int{1, 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "Meet JFlow.\n\nHold a key, speak, release. Clean text lands here."
+	if got != want {
+		t.Fatalf("rendered action paragraph = %q, want %q", got, want)
+	}
+	got, err = renderFormatterPlan(formatterPlan{Layout: "numbered", Content: []string{"1. First task\n2. Second task"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "1. First task\n2. Second task"
+	if got != want {
+		t.Fatalf("rendered packed list = %q, want %q", got, want)
 	}
 }
 

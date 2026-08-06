@@ -33,6 +33,7 @@ func TestOllamaFormatterE2E(t *testing.T) {
 		raw       string
 		wantParts []string
 		forbid    string
+		minBreaks int
 	}{
 		{
 			name:      "explicit ordered tasks",
@@ -49,6 +50,15 @@ func TestOllamaFormatterE2E(t *testing.T) {
 			raw:       "I spoke to the team today and we agreed to revisit the launch timeline next week.",
 			wantParts: []string{"team", "launch timeline", "next week"},
 			forbid:    "\n- ",
+		},
+		{
+			name: "story with distinct beats",
+			raw: "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next three days. " +
+				"I'd just left my last job and moved back to Arch Linux. First thing I missed, Wispr Flow. Nothing like it existed for Hyprland or Wayland. " +
+				"So instead of waiting around, I built my own. Meet JFlow. Hold a key, speak, release. Clean text lands wherever you were typing. " +
+				"No live transcript cluttering your screen. No lost recordings if a provider hiccups mid-transcription.",
+			wantParts: []string{"favorite writing tool", "Wispr Flow", "Meet JFlow", "Hold a key", "No lost recordings"},
+			minBreaks: 2,
 		},
 	}
 
@@ -68,6 +78,9 @@ func TestOllamaFormatterE2E(t *testing.T) {
 			}
 			if tc.forbid != "" && strings.Contains(result.Text, tc.forbid) {
 				t.Fatalf("formatted output %q unexpectedly contains %q", result.Text, tc.forbid)
+			}
+			if breaks := strings.Count(result.Text, "\n\n"); breaks < tc.minBreaks {
+				t.Fatalf("formatted output %q has %d paragraph breaks, want at least %d", result.Text, breaks, tc.minBreaks)
 			}
 		})
 	}

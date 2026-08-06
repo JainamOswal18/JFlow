@@ -27,7 +27,7 @@ func TestPipelineE2EFormatsAuditsDeliversAndAcceptsFeedback(t *testing.T) {
 	if got.Transcript != "please help me with the issue and brainstorm it" {
 		t.Fatalf("transcript = %q", got.Transcript)
 	}
-	if got.FinalText != "REQUEST:\n1. Help me with the issue.\n2. Brainstorm it." {
+	if got.FinalText != "1. Help me with the issue.\n2. Brainstorm it." {
 		t.Fatalf("final text = %q", got.FinalText)
 	}
 	if !got.Formatting.Eligible || !got.Formatting.Applied || got.Formatting.RawResponse == "" || got.Formatting.SystemPrompt == "" {
@@ -59,7 +59,7 @@ func TestPipelineE2EFormatsAuditsDeliversAndAcceptsFeedback(t *testing.T) {
 		t.Fatalf("benchmark response=%#v err=%v", benchmark, err)
 	}
 	inserted, err := os.ReadFile(os.Getenv("JFLOW_TEST_WTYPE_LOG"))
-	if err != nil || !strings.Contains(string(inserted), "REQUEST") || !strings.Contains(string(inserted), "Help me with the issue.") {
+	if err != nil || !strings.Contains(string(inserted), "1. Help me with the issue.") || !strings.Contains(string(inserted), "2. Brainstorm it.") {
 		t.Fatalf("wtype log=%q err=%v", inserted, err)
 	}
 }
@@ -133,7 +133,7 @@ func pipelineServer(t *testing.T, formatterStatus int) *httptest.Server {
 				_, _ = w.Write([]byte(`{"error":"temporarily unavailable"}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"message":{"content":"{\"layout\":\"numbered\",\"paragraph\":\"\",\"prefix\":\"REQUEST\",\"items\":[\"Help me with the issue.\",\"Brainstorm it.\"],\"suffix\":\"\"}"}}`))
+			_, _ = w.Write([]byte(`{"message":{"content":"{\"layout\":\"numbered\",\"content\":[\"Help me with the issue.\",\"Brainstorm it.\"],\"break_after\":[]}"}}`))
 		default:
 			t.Fatalf("unexpected request path %s", r.URL.Path)
 		}

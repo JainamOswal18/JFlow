@@ -79,10 +79,12 @@ message. Formatter output is constrained and normalized to plain text before
 insertion.
 
 The formatter returns a strict JSON layout plan rather than free-form text:
-`paragraph`, `bullets`, or `numbered`, with optional lead-in and list items.
-Qwen chooses the semantic grouping and may clean up or rephrase for clarity;
-JFlow owns the visible `-` and `1.` syntax so rendering is deterministic. Only
-the inferred active style is appended to the base formatter prompt.
+`paragraph`, `bullets`, or `numbered`. Qwen writes visible content once. For a
+multi-beat story or post it also returns 1-based sentence boundaries, and JFlow
+inserts blank lines at those boundaries locally. This avoids duplicate JSON
+content and preserves the complete narrative while still making paragraph
+rendering deterministic. JFlow owns visible `-` and `1.` syntax. Only the
+inferred active style is appended to the base formatter prompt.
 
 For every eligible formatting request, the job metadata records the local Qwen
 model, formatter input, exact system prompt, HTTP status, end-to-end latency,
@@ -248,8 +250,9 @@ The formatter is intentionally post-ASR, local-only, and bounded:
 - Qwen3 1.7B Q4 via local Ollama, non-thinking mode, 2K context, 320-token
   output cap, seven-second deadline, 15-minute keep-alive;
 - Qwen returns a strict local layout plan; JFlow renders its chosen paragraph,
-  bullet, or numbered structure deterministically. It does not add a second
-  semantic rewrite or safety rewrite check;
+  bullet, or numbered structure deterministically. Narrative paragraph breaks
+  are model-selected sentence boundaries rendered locally. It does not add a
+  second semantic rewrite or safety rewrite check;
 - an explicit spoken first/second/third sequence is normalized locally and
   marked as a mandatory numbered layout for Qwen. The model may improve item
   wording, while JFlow owns the final number markers;
