@@ -153,6 +153,12 @@ still improve each item's wording, but cannot collapse that clear sequence into
 an ordinary paragraph. JFlow renders the number markers, removing duplicate
 markers if the model retained them inside an item.
 
+For mixed prose such as a post followed by `Under the hood: 1. … 2. … 3. …`,
+JFlow recognizes that unambiguous inline sequence locally and renders an
+ALL-CAPS heading with a numbered section after the prose paragraphs. This
+requires a real heading plus at least three numbered entries, so ordinary prose
+and decimal numbers are left alone.
+
 The formatter receives the transcript and, only when confidently inferred from
 the active window, one short local context hint such as “AI-assistant request”,
 “professional message”, or “casual message”. Raw window titles and process

@@ -117,6 +117,14 @@ func TestRenderFormatterPlan(t *testing.T) {
 	if got != want {
 		t.Fatalf("rendered action paragraph = %q, want %q", got, want)
 	}
+	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"I built JFlow. It works locally. Under the hood: 1. ElevenLabs Scribe v2 for transcription 2. A local Qwen model for formatting 3. Audio auto deleted after an hour."}, BreakAfter: []int{2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "I built JFlow. It works locally.\n\nUNDER THE HOOD:\n\n1. ElevenLabs Scribe v2 for transcription\n2. A local Qwen model for formatting\n3. Audio auto deleted after an hour."
+	if got != want {
+		t.Fatalf("rendered inline numbered section = %q, want %q", got, want)
+	}
 	got, err = renderFormatterPlan(formatterPlan{Layout: "numbered", Content: []string{"1. First task\n2. Second task"}})
 	if err != nil {
 		t.Fatal(err)

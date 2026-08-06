@@ -25,6 +25,8 @@ var (
 	sentenceBoundary         = regexp.MustCompile(`[.!?]+(?:\s|$)`)
 	standaloneCallout        = regexp.MustCompile(`(?i)^(?:meet|introducing|introduce|say hello to)\s+[A-Z][[:alnum:]-]*(?:\s+[A-Z][[:alnum:]-]*){0,2}[.!]?$`)
 	shortActionSentence      = regexp.MustCompile(`(?i)^(?:hold|press|open|click|type|say|write|speak|release|copy|paste|run)\b`)
+	inlineListHeading        = regexp.MustCompile(`(?i)([[:alpha:]][^.!?\n]{0,80}):\s*1[.)]\s+`)
+	inlineLaterListMarker    = regexp.MustCompile(`\s+[2-9][0-9]*[.)]\s+`)
 	spokenOrdinalMarker      = regexp.MustCompile(`(?i)\b(?:the\s+)?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th)(?:\s+thing)?(?:\s+i\s+want\s+you\s+to\s+do)?(?:\s+is)?(?:\s+to)?\s*`)
 	trailingOrdinalConnector = regexp.MustCompile(`(?i)[,;]?\s*and\s*$`)
 )
@@ -156,7 +158,7 @@ func renderFormatterPlan(plan formatterPlan) (string, error) {
 			}
 			content = append(content, text)
 		}
-		return renderParagraphBreaks(strings.Join(content, " "), plan.BreakAfter), nil
+		return renderMixedParagraphs(strings.Join(content, " "), plan.BreakAfter), nil
 	case "bullets", "numbered":
 		items := plan.Content
 		if len(items) == 1 {
@@ -189,6 +191,62 @@ func renderFormatterPlan(plan formatterPlan) (string, error) {
 	default:
 		return "", fmt.Errorf("formatter returned unknown layout %q", plan.Layout)
 	}
+}
+
+// renderMixedParagraphs recognizes a clear trailing “Heading: 1. … 2. …”
+// sequence in otherwise plain dictated prose. The model still writes all text
+// exactly once; JFlow only turns that unambiguous inline sequence into a
+// readable numbered section after paragraphing the preceding prose.
+func renderMixedParagraphs(text string, breakAfter []int) string {
+	prose, heading, items, ok := extractInlineNumberedList(text)
+	if !ok {
+		return renderParagraphBreaks(text, breakAfter)
+	}
+	var b strings.Builder
+	b.WriteString(renderParagraphBreaks(prose, breakAfter))
+	if b.Len() > 0 {
+		b.WriteString("\n\n")
+	}
+	b.WriteString(strings.ToUpper(heading))
+	b.WriteString(":\n\n")
+	for index, item := range items {
+		fmt.Fprintf(&b, "%d. %s", index+1, item)
+		if index < len(items)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+func extractInlineNumberedList(text string) (prose, heading string, items []string, ok bool) {
+	match := inlineListHeading.FindStringSubmatchIndex(text)
+	if match == nil {
+		return "", "", nil, false
+	}
+	prose = strings.TrimSpace(text[:match[0]])
+	heading = strings.TrimSpace(text[match[2]:match[3]])
+	firstItemStart := match[1]
+	listText := text[firstItemStart:]
+	markers := inlineLaterListMarker.FindAllStringIndex(listText, -1)
+	if len(markers) < 2 {
+		return "", "", nil, false
+	}
+	start := 0
+	for _, marker := range markers {
+		item := strings.TrimSpace(listText[start:marker[0]])
+		if item == "" {
+			return "", "", nil, false
+		}
+		items = append(items, item)
+		start = marker[1]
+	}
+	if last := strings.TrimSpace(listText[start:]); last != "" {
+		items = append(items, last)
+	}
+	if prose == "" || heading == "" || len(items) < 3 {
+		return "", "", nil, false
+	}
+	return prose, heading, items, true
 }
 
 // renderParagraphBreaks turns model-selected sentence boundaries into visible

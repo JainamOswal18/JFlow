@@ -60,6 +60,12 @@ func TestOllamaFormatterE2E(t *testing.T) {
 			wantParts: []string{"favorite writing tool", "Wispr Flow", "Meet JFlow", "Hold a key", "No lost recordings"},
 			minBreaks: 2,
 		},
+		{
+			name:      "flattened product post with implementation list",
+			raw:       "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next 3 days. I'd just left my last job and moved back to Arch Linux. First thing I missed? Wispr Flow. Nothing like it existed for Hyprland or Wayland, so instead of waiting around, I built my own. Meet JFlow. Hold a key, speak, release. Clean text lands wherever you were typing. No live transcript cluttering your screen. No lost recordings if a provider hiccups mid transcription. Under the hood: 1. ElevenLabs Scribe v2 for transcription 2. A local Qwen model running on my own GPU for formatting longer dictations 3. Everything stored locally, audio auto deleted after an hour.",
+			wantParts: []string{"favorite writing tool", "Wispr Flow", "Meet JFlow", "UNDER THE HOOD", "1. ElevenLabs Scribe", "2. A local Qwen", "3. Everything stored locally"},
+			minBreaks: 3,
+		},
 	}
 
 	for _, tc := range cases {

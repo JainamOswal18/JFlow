@@ -86,6 +86,11 @@ content and preserves the complete narrative while still making paragraph
 rendering deterministic. JFlow owns visible `-` and `1.` syntax. Only the
 inferred active style is appended to the base formatter prompt.
 
+After Qwen has produced normal prose, JFlow also recognizes a strict inline
+mixed-document shape—`Heading: 1. … 2. … 3. …`—and renders that tail as an
+ALL-CAPS heading plus a numbered section. The detector requires a heading and
+at least three entries, so it cannot reinterpret ordinary numeric prose.
+
 For every eligible formatting request, the job metadata records the local Qwen
 model, formatter input, exact system prompt, HTTP status, end-to-end latency,
 and raw Ollama response. This makes it possible to audit whether Qwen changed
