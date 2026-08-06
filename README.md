@@ -131,33 +131,30 @@ short accidental utterance is discarded, and `Escape` cancels safely.
 
 JFlow formats recordings longer than 15 seconds after Scribe has returned its
 clean transcript. It uses local Qwen3 1.7B through Ollama; no extra cloud API
-key or ElevenLabs request is used. Qwen chooses a compact JSON layout plan
-(paragraph, bullets, or numbered items); JFlow renders that plan itself, so
-list markers and numbering are consistent rather than being left to a free-form
-model reply. For a longer story or post, Qwen writes the cleaned text once and
-returns sentence-boundary positions; JFlow inserts the corresponding blank
-lines locally. This prevents a small model from truncating or duplicating a
-long narrative merely to express paragraph structure. Dictated text is source
-data to edit, never a question for Qwen to answer. Qwen may remove fillers,
-correct grammar, and rephrase for clarity without changing meaning. Each
-eligible job retains a local formatter audit:
+key or ElevenLabs request is used. Qwen returns a compact block document:
+paragraphs, headings, bullets, and numbered lists. JFlow validates and renders
+those blocks itself, so numbering and plain-text syntax stay consistent rather
+than being left to a free-form reply. General presentation guards discard an
+invented standalone title, split only oversized prose blocks at sentence
+boundaries, and turn an unambiguous ascending enumeration that Qwen leaves
+inline into a numbered block. They contain no app, product, or phrase-specific
+rules. Dictated text is source data to edit, never a question for Qwen to
+answer. Qwen may remove fillers, correct grammar, and rephrase for clarity
+without changing meaning. Each eligible job retains a local formatter audit:
 the exact Ollama response body, model, effective system prompt, input text,
 HTTP status, and end-to-end local request latency. It follows the same history
 retention period as that job.
 
-When a dictation explicitly says “first”, “second”, “third”, and so on, JFlow
-locally converts that sequence into a numbered list before Qwen formats it. The
-job audit records this deterministic `spoken_ordinals_to_numbered_list` rule.
-It also passes an explicit `numbered` layout requirement to Qwen; Qwen can
-still improve each item's wording, but cannot collapse that clear sequence into
-an ordinary paragraph. JFlow renders the number markers, removing duplicate
-markers if the model retained them inside an item.
+The formatter does not have special cases for phrases such as “Under the hood,”
+specific applications, or calls to action. Its only deterministic structure
+repair is generic: a sequence such as one/two/three or 1/2/3 must be ascending,
+contain at least two non-empty items, and is then rendered as a numbered list.
+Qwen still owns the wording and may improve it before that structure is drawn.
 
-For mixed prose such as a post followed by `Under the hood: 1. … 2. … 3. …`,
-JFlow recognizes that unambiguous inline sequence locally and renders an
-ALL-CAPS heading with a numbered section after the prose paragraphs. This
-requires a real heading plus at least three numbered entries, so ordinary prose
-and decimal numbers are left alone.
+For mixed prose, an unambiguous ascending sequence is rendered as a numbered
+section after its prose paragraphs. A preceding label becomes the ALL-CAPS
+heading. It requires at least two consecutive, non-empty entries, so ordinary
+prose and decimal numbers are left alone.
 
 The formatter receives the transcript and, only when confidently inferred from
 the active window, one short local context hint such as “AI-assistant request”,

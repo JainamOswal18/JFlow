@@ -1010,18 +1010,11 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		_ = d.store.Save(job)
 		d.setStatus("processing", "Formatting")
 		originalText := text
-		beforeFormatting := originalText
-		preprocessRules := []string(nil)
-		if normalized, applied := normalizeSpokenOrdinals(beforeFormatting); applied {
-			beforeFormatting = normalized
-			preprocessRules = []string{"spoken_ordinals_to_numbered_list"}
-		}
-		formatCtx, cancel := context.WithTimeout(ctx, formatterDeadline(beforeFormatting, d.cfg.Formatter))
-		result, formatErr := FormatWithOllama(formatCtx, beforeFormatting, job.Formatting.ContextHint, d.cfg.Formatter)
+		formatCtx, cancel := context.WithTimeout(ctx, formatterDeadline(originalText, d.cfg.Formatter))
+		result, formatErr := FormatWithOllama(formatCtx, originalText, job.Formatting.ContextHint, d.cfg.Formatter)
 		cancel()
 		job.Formatting = result.Audit
 		job.Formatting.Eligible = true
-		job.Formatting.PreprocessRules = preprocessRules
 		if d.cancelledProcessing(ctx, job) {
 			return
 		}

@@ -22,7 +22,12 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"{\"layout\":\"bullets\",\"content\":[\"- Use a dark theme\",\"Include pricing\"],\"break_after\":[]}"}}`)), Header: make(http.Header)}, nil
+		document := `{"blocks":[{"type":"bullets","items":["Use a dark theme","Include pricing"]}]}`
+		body, err := json.Marshal(map[string]any{"message": map[string]string{"content": document}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
 	})}
 	defer func() { formatterHTTPClient = oldClient }()
 	cfg := DefaultConfig().Formatter
@@ -52,25 +57,43 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 		t.Fatalf("expected a strict JSON formatter contract: %#v", format)
 	}
 	properties := format["properties"].(map[string]any)
-	if properties["layout"] == nil || properties["content"] == nil || properties["break_after"] == nil {
-		t.Fatalf("expected structural formatter plan: %#v", format)
+	if properties["blocks"] == nil || properties["layout"] != nil || properties["content"] != nil || properties["break_after"] != nil {
+		t.Fatalf("expected strict block document schema: %#v", format)
 	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "JSON layout plan") || !strings.Contains(system, "break_after") || !strings.Contains(system, "grammatical person") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "JSON block document") || !strings.Contains(system, "MUST NOT collapse") || !strings.Contains(system, "grammatical person") {
 		t.Fatalf("unexpected system prompt: %q", system)
 	}
 	user := messages[1].(map[string]any)["content"].(string)
-	if !strings.Contains(user, "FORMAT ONLY THE QUOTED SOURCE DATA") || !strings.Contains(user, "<SOURCE>") || !strings.Contains(user, "Build a landing page use a dark theme") {
+	if !strings.Contains(user, "Transcript data only") || !strings.Contains(user, "\"transcript\"") || !strings.Contains(user, "Build a landing page use a dark theme") {
 		t.Fatalf("source text was not safely wrapped: %q", user)
 	}
-	ordered := formatterSourceMessage("1. First task\n2. Second task")
-	if !strings.Contains(ordered, "STRUCTURE REQUIREMENT") || !strings.Contains(ordered, "layout to numbered") {
-		t.Fatalf("explicit source ordering was not preserved in metadata: %q", ordered)
+	source := formatterSourceMessage("1. First task\n2. Second task")
+	if strings.Contains(source, "STRUCTURE REQUIREMENT") || !strings.Contains(source, "\"transcript\"") {
+		t.Fatalf("source data must not become hidden formatting instructions: %q", source)
 	}
-	narrative := formatterSourceMessage("I moved to Linux. I missed a writing tool. Nothing comparable existed. So I built one. Meet JFlow.")
-	if !strings.Contains(narrative, "multi-beat spoken monologue") || !strings.Contains(narrative, "layout to paragraph") || !strings.Contains(narrative, "break_after") {
-		t.Fatalf("long narrative was not given paragraph metadata: %q", narrative)
+}
+
+func TestFormatWithOllamaRendersMixedBlockDocument(t *testing.T) {
+	oldClient := formatterHTTPClient
+	formatterHTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		document := `{"blocks":[{"type":"paragraph","text":"Hold a key, speak, release."},{"type":"heading","text":"Under the hood"},{"type":"numbered","items":["ElevenLabs Scribe v2 for transcription","A local Qwen model running on my own GPU for formatting longer dictations","Everything stored locally, audio auto deleted after an hour"]},{"type":"paragraph","text":"Sometimes the fastest way to get a tool you need isn't waiting for someone to build it."},{"type":"paragraph","text":"Code's here if you're curious: GitHub link."}]}`
+		body, err := json.Marshal(map[string]any{"message": map[string]string{"content": document}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: make(http.Header)}, nil
+	})}
+	defer func() { formatterHTTPClient = oldClient }()
+
+	result, err := FormatWithOllama(context.Background(), "Hold a key, speak, release. Under the hood: ElevenLabs Scribe v2 for transcription, a local Qwen model for formatting, and everything stored locally. Sometimes the fastest way to get a tool you need isn't waiting for someone to build it. Code's here if you're curious: GitHub link.", "Active style: LinkedIn post.", DefaultConfig().Formatter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Hold a key, speak, release.\n\nUNDER THE HOOD:\n\n1. ElevenLabs Scribe v2 for transcription\n2. A local Qwen model running on my own GPU for formatting longer dictations\n3. Everything stored locally, audio auto deleted after an hour\n\nSometimes the fastest way to get a tool you need isn't waiting for someone to build it.\n\nCode's here if you're curious: GitHub link."
+	if result.Text != want {
+		t.Fatalf("rendered document = %q, want %q", result.Text, want)
 	}
 }
 
@@ -89,74 +112,73 @@ func TestFormatterDeadlineScalesWithTranscriptSize(t *testing.T) {
 	}
 }
 
-func TestRenderFormatterPlan(t *testing.T) {
-	got, err := renderFormatterPlan(formatterPlan{Layout: "bullets", Content: []string{"- a fast local formatter", "accurate transcription", "reliable retries"}})
+func TestDefaultFormatterAllowsStructuredPostOutput(t *testing.T) {
+	if got := DefaultConfig().Formatter.MaxOutputTokens; got < 512 {
+		t.Fatalf("formatter output cap = %d, want at least 512 tokens for block documents", got)
+	}
+}
+
+func TestRenderFormatterDocument(t *testing.T) {
+	document := formatterDocument{Blocks: []formatterBlock{
+		{Type: "paragraph", Text: "A concise opening."},
+		{Type: "heading", Text: "Implementation details"},
+		{Type: "numbered", Items: []string{"Capture speech", "Format the transcript", "Insert it"}},
+		{Type: "bullets", Items: []string{"Local processing", "Retry support"}},
+	}}
+	got, err := renderFormatterDocument(document)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "- a fast local formatter\n- accurate transcription\n- reliable retries"
+	want := "A concise opening.\n\nIMPLEMENTATION DETAILS:\n\n1. Capture speech\n2. Format the transcript\n3. Insert it\n\n- Local processing\n- Retry support"
 	if got != want {
-		t.Fatalf("rendered plan = %q, want %q", got, want)
+		t.Fatalf("rendered document = %q, want %q", got, want)
 	}
-	if _, err := renderFormatterPlan(formatterPlan{Layout: "numbered", Content: []string{"only one"}}); err == nil {
+	if _, err := renderFormatterDocument(formatterDocument{Blocks: []formatterBlock{{Type: "numbered", Items: []string{"only one"}}}}); err == nil {
 		t.Fatal("single-item list must be rejected")
 	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"I switched back to Linux. Meet JFlow. Hold a key, speak, release."}, BreakAfter: []int{1, 2}})
-	if err != nil {
-		t.Fatal(err)
+	if _, err := renderFormatterDocument(formatterDocument{Blocks: []formatterBlock{{Type: "paragraph", Text: "x", Items: []string{"not allowed"}}}}); err == nil {
+		t.Fatal("mixed paragraph block must be rejected")
 	}
-	want = "I switched back to Linux.\n\nMeet JFlow.\n\nHold a key, speak, release."
-	if got != want {
-		t.Fatalf("rendered paragraph group = %q, want %q", got, want)
+}
+
+func TestNormalizeFormatterDocumentUsesGeneralEnumerationGrammar(t *testing.T) {
+	document := formatterDocument{Blocks: []formatterBlock{
+		{Type: "paragraph", Text: "The work has three parts. Implementation details, one, capture audio, two, transcribe it, three, insert the cleaned text. Then verify the result."},
+	}}
+	got := normalizeFormatterDocument(document, "The work has three parts. Implementation details, one, capture audio, two, transcribe it, three, insert the cleaned text. Then verify the result.")
+	want := []formatterBlock{
+		{Type: "paragraph", Text: "The work has three parts."},
+		{Type: "heading", Text: "Implementation details"},
+		{Type: "numbered", Items: []string{"capture audio", "transcribe it", "insert the cleaned text."}},
+		{Type: "paragraph", Text: "Then verify the result."},
 	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"First sentence.", "Second sentence.", "Third sentence."}, BreakAfter: []int{2}})
-	if err != nil {
-		t.Fatal(err)
+	if !equalFormatterBlocks(got.Blocks, want) {
+		t.Fatalf("normalized blocks = %#v, want %#v", got.Blocks, want)
 	}
-	want = "First sentence. Second sentence.\n\nThird sentence."
-	if got != want {
-		t.Fatalf("rendered paragraph boundaries = %q, want %q", got, want)
+	withoutInventedHeading := normalizeFormatterDocument(formatterDocument{Blocks: []formatterBlock{{Type: "heading", Text: "Request for assistance"}, {Type: "paragraph", Text: "Please identify the issue."}}}, "Please identify the issue.")
+	if len(withoutInventedHeading.Blocks) != 1 || withoutInventedHeading.Blocks[0].Text != "Please identify the issue." {
+		t.Fatalf("invented heading must be removed: %#v", withoutInventedHeading.Blocks)
 	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"I moved to Linux. Nothing comparable existed. Meet JFlow. Hold a key, speak, release."}, BreakAfter: []int{2}})
-	if err != nil {
-		t.Fatal(err)
+	paragraphs := normalizeFormatterDocument(formatterDocument{Blocks: []formatterBlock{{Type: "paragraph", Text: "One. Two. Three. Four."}}}, "One. Two. Three. Four.")
+	if len(paragraphs.Blocks) != 2 || paragraphs.Blocks[0].Text != "One. Two." || paragraphs.Blocks[1].Text != "Three. Four." {
+		t.Fatalf("long paragraph should be split mechanically: %#v", paragraphs.Blocks)
 	}
-	want = "I moved to Linux. Nothing comparable existed.\n\nMeet JFlow.\n\nHold a key, speak, release."
-	if got != want {
-		t.Fatalf("rendered standalone callout = %q, want %q", got, want)
+	unchanged := normalizeFormatterDocument(formatterDocument{Blocks: []formatterBlock{{Type: "paragraph", Text: "The first draft was better than the second draft."}}}, "The first draft was better than the second draft.")
+	if len(unchanged.Blocks) != 1 || unchanged.Blocks[0].Type != "paragraph" {
+		t.Fatalf("ordinary comparison must remain prose: %#v", unchanged.Blocks)
 	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"Meet JFlow. Hold a key, speak, release. Clean text lands here."}, BreakAfter: []int{1, 2}})
-	if err != nil {
-		t.Fatal(err)
+}
+
+func equalFormatterBlocks(got, want []formatterBlock) bool {
+	if len(got) != len(want) {
+		return false
 	}
-	want = "Meet JFlow.\n\nHold a key, speak, release. Clean text lands here."
-	if got != want {
-		t.Fatalf("rendered action paragraph = %q, want %q", got, want)
+	for index := range want {
+		if got[index].Type != want[index].Type || got[index].Text != want[index].Text || strings.Join(got[index].Items, "\x00") != strings.Join(want[index].Items, "\x00") {
+			return false
+		}
 	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"I built JFlow. It works locally. Under the hood: 1. ElevenLabs Scribe v2 for transcription 2. A local Qwen model for formatting 3. Audio auto deleted after an hour."}, BreakAfter: []int{2}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want = "I built JFlow. It works locally.\n\nUNDER THE HOOD:\n\n1. ElevenLabs Scribe v2 for transcription\n2. A local Qwen model for formatting\n3. Audio auto deleted after an hour."
-	if got != want {
-		t.Fatalf("rendered inline numbered section = %q, want %q", got, want)
-	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"Hold a key, speak, release. Under the hood: one, ElevenLabs Scribe V2 for transcription. Two, a local Qwen model running on my own GPU for formatting longer dictations. Three, everything stored locally, audio auto deleted after an hour. Sometimes the fastest way to get a tool you need isn't waiting for someone to build it. It's a free weekend, free tier APIs, and enough annoyance to push through. Code's here if you're curious: GitHub link."}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want = "Hold a key, speak, release.\n\nUNDER THE HOOD:\n\n1. ElevenLabs Scribe V2 for transcription.\n2. A local Qwen model running on my own GPU for formatting longer dictations.\n3. Everything stored locally, audio auto deleted after an hour.\n\nSometimes the fastest way to get a tool you need isn't waiting for someone to build it. It's a free weekend, free tier APIs, and enough annoyance to push through.\n\nCode's here if you're curious: GitHub link."
-	if got != want {
-		t.Fatalf("rendered spoken inline numbered section = %q, want %q", got, want)
-	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "numbered", Content: []string{"1. First task\n2. Second task"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want = "1. First task\n2. Second task"
-	if got != want {
-		t.Fatalf("rendered packed list = %q, want %q", got, want)
-	}
+	return true
 }
 
 func TestNormalizePlainTextUsesReadableStructure(t *testing.T) {
@@ -164,17 +186,6 @@ func TestNormalizePlainTextUsesReadableStructure(t *testing.T) {
 	want := "SUMMARY\n- First item\n- Second item\n**Keep bold**"
 	if got != want {
 		t.Fatalf("normalized text = %q, want %q", got, want)
-	}
-}
-
-func TestNormalizeSpokenOrdinals(t *testing.T) {
-	got, applied := normalizeSpokenOrdinals("All right. The first thing I want you to do is help me with it. Second is to identify the issue, and third is to brainstorm it.")
-	want := "1. Help me with it.\n2. Identify the issue.\n3. Brainstorm it."
-	if !applied || got != want {
-		t.Fatalf("ordinal normalization = %q, applied=%v; want %q", got, applied, want)
-	}
-	if _, applied := normalizeSpokenOrdinals("The first draft was better than the second draft."); applied {
-		t.Fatal("comparison text must not be treated as a spoken task list")
 	}
 }
 

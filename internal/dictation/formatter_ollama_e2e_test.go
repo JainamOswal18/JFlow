@@ -23,56 +23,46 @@ func TestOllamaFormatterE2E(t *testing.T) {
 	cfg := DefaultConfig().Formatter
 	cfg.Model = model
 	// A comparison run may have to load a model after another one was used.
-	// Production keeps its selected model warm and retains its ten-second
-	// deadline; this test gives the explicit benchmark a bounded cold-start
-	// allowance without changing production behavior.
+	// Production keeps its selected model warm; this bounded test allowance
+	// covers an explicit cold-model benchmark without changing production.
 	cfg.TimeoutSecs = 30
 
 	cases := []struct {
-		name      string
-		raw       string
-		hint      string
-		wantParts []string
-		forbid    string
-		minBreaks int
+		name        string
+		raw         string
+		hint        string
+		wantParts   []string
+		wantMarkers []string
+		forbid      string
+		minBreaks   int
 	}{
 		{
-			name:      "explicit ordered tasks",
-			raw:       "1. Help me with it.\n2. Identify the issue.\n3. Brainstorm it.",
-			wantParts: []string{"1. ", "2. ", "3. "},
+			name:        "three-step AI request",
+			raw:         "I need three things from you. First, help me understand the formatter issue. Second, identify the root cause. Third, propose a practical fix.",
+			wantParts:   []string{"formatter issue", "root cause", "practical fix"},
+			wantMarkers: []string{"1. ", "2. ", "3. "},
 		},
 		{
-			name:      "separate requests",
-			raw:       "Show me the system prompt. Also, list the next phases and explain how I can test everything.",
-			wantParts: []string{"system prompt", "next phases", "test"},
+			name:        "current LinkedIn post from spoken story",
+			raw:         "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next three days. I had just left my last job and moved back to Arch Linux. First thing I missed, WisprFlow. Nothing like it existed for Hyprland or Wayland. So instead of waiting around, I built my own. Meet JFlow. Hold the key, speak, release. Clean text lands wherever you're typing. No live transcript cluttering your screen. No lost recording if a provider hiccups mid-transcription. Under the hood, one, ElevenLabs Scribe V2 for transcription, two, a local Qwen model running on my own GPU for handling long dictations. Three, everything stored locally. Audio auto-detected, deleted after an hour. Sometimes the fastest way to get a tool you need isn't waiting for someone to build it. It's a free weekend, free tier APIs, and enough annoyance to push through. Code's here if you're curious.",
+			hint:        "Active style: LinkedIn post. Keep a confident first-person professional voice; use a short hook, 1 to 3 sentence paragraphs, and a standalone product/reveal line when natural. Use a list only for genuine takeaways; do not add claims or a call to action.",
+			wantParts:   []string{"favorite writing tool", "WisprFlow", "Meet JFlow", "Clean text lands", "UNDER THE HOOD", "ElevenLabs Scribe", "local Qwen", "Everything stored locally", "Sometimes the fastest way", "Code's here"},
+			wantMarkers: []string{"UNDER THE HOOD:", "1. ", "2. ", "3. "},
+			minBreaks:   4,
 		},
 		{
-			name:      "ordinary narrative",
-			raw:       "I spoke to the team today and we agreed to revisit the launch timeline next week.",
-			wantParts: []string{"team", "launch timeline", "next week"},
+			name:      "casual two-beat message",
+			raw:       "I checked the new build this morning and it feels much smoother now. The only thing still bothering me is the retry button. Can you take a look when you have time? I am happy to test again after that.",
+			hint:      "Active style: casual chat. Keep a friendly, direct tone. Use short paragraphs when they help readability.",
+			wantParts: []string{"new build", "smoother", "retry button", "test again"},
 			forbid:    "\n- ",
+			minBreaks: 1,
 		},
 		{
-			name: "story with distinct beats",
-			raw: "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next three days. " +
-				"I'd just left my last job and moved back to Arch Linux. First thing I missed, Wispr Flow. Nothing like it existed for Hyprland or Wayland. " +
-				"So instead of waiting around, I built my own. Meet JFlow. Hold a key, speak, release. Clean text lands wherever you were typing. " +
-				"No live transcript cluttering your screen. No lost recordings if a provider hiccups mid-transcription.",
-			wantParts: []string{"favorite writing tool", "Wispr Flow", "Meet JFlow", "Hold a key", "No lost recordings"},
-			minBreaks: 2,
-		},
-		{
-			name:      "flattened product post with implementation list",
-			raw:       "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next 3 days. I'd just left my last job and moved back to Arch Linux. First thing I missed? Wispr Flow. Nothing like it existed for Hyprland or Wayland, so instead of waiting around, I built my own. Meet JFlow. Hold a key, speak, release. Clean text lands wherever you were typing. No live transcript cluttering your screen. No lost recordings if a provider hiccups mid transcription. Under the hood: 1. ElevenLabs Scribe v2 for transcription 2. A local Qwen model running on my own GPU for formatting longer dictations 3. Everything stored locally, audio auto deleted after an hour.",
-			wantParts: []string{"favorite writing tool", "Wispr Flow", "Meet JFlow", "UNDER THE HOOD", "1. ElevenLabs Scribe", "2. A local Qwen", "3. Everything stored locally"},
-			minBreaks: 3,
-		},
-		{
-			name:      "linkedin post from spoken story",
-			raw:       "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next three days. I had just left my last job and moved back to Arch Linux. First thing I missed, WisprFlow. Nothing like it existed for Hyprland or Wayland. So instead of waiting around, I built my own. Meet JFlow. Hold the key, speak, release. Clean text lands wherever you're typing. No live transcript cluttering your screen. No lost recording if a provider hiccups mid-transcription. Under the hood, one, ElevenLabs Scribe V2 for transcription, two, a local Qwen model running on my own GPU for handling long dictations. Three, everything stored locally. Audio auto-detected, deleted after an hour. Sometimes the fastest way to get a tool you need isn't waiting for someone to build it. It's a free weekend, free tier APIs, and enough annoyance to push through. Code's here if you're curious.",
-			hint:      "Active style: LinkedIn post. Keep a confident first-person professional voice; use a short hook, 1 to 3 sentence paragraphs, and a standalone product/reveal line when natural. Use a list only for genuine takeaways; do not add claims or a call to action.",
-			wantParts: []string{"favorite writing tool", "WisprFlow", "Meet JFlow", "Clean text lands", "UNDER THE HOOD", "Sometimes the fastest way", "Code's here"},
-			minBreaks: 3,
+			name:      "professional email with unordered requirements",
+			raw:       "For the proposal, please include the pricing model, the rollout timeline, and the ownership plan. Keep the tone professional and send me a draft by Friday.",
+			hint:      "Active style: professional email. Use a list only when it makes an actual set of requirements clearer.",
+			wantParts: []string{"pricing model", "rollout timeline", "ownership plan", "Friday"},
 		},
 	}
 
@@ -93,6 +83,17 @@ func TestOllamaFormatterE2E(t *testing.T) {
 				if !strings.Contains(strings.ToLower(result.Text), strings.ToLower(part)) {
 					t.Fatalf("formatted output %q is missing %q", result.Text, part)
 				}
+			}
+			for _, marker := range tc.wantMarkers {
+				if !strings.Contains(result.Text, marker) {
+					t.Fatalf("formatted output %q is missing structural marker %q", result.Text, marker)
+				}
+			}
+			if strings.Contains(result.Text, "```") {
+				t.Fatalf("formatted output contains a code fence: %q", result.Text)
+			}
+			if strings.Contains(strings.ToLower(result.Text), "transcript data only") || strings.Contains(strings.ToLower(result.Text), "\"transcript\"") {
+				t.Fatalf("formatted output leaked its data wrapper: %q", result.Text)
 			}
 			if tc.forbid != "" && strings.Contains(result.Text, tc.forbid) {
 				t.Fatalf("formatted output %q unexpectedly contains %q", result.Text, tc.forbid)

@@ -133,7 +133,7 @@ func pipelineServer(t *testing.T, formatterStatus int) *httptest.Server {
 				_, _ = w.Write([]byte(`{"error":"temporarily unavailable"}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"message":{"content":"{\"layout\":\"numbered\",\"content\":[\"Help me with the issue.\",\"Brainstorm it.\"],\"break_after\":[]}"}}`))
+			_, _ = w.Write([]byte(`{"message":{"content":"{\"blocks\":[{\"type\":\"numbered\",\"items\":[\"Help me with the issue.\",\"Brainstorm it.\"]}]}"}}`))
 		default:
 			t.Fatalf("unexpected request path %s", r.URL.Path)
 		}
