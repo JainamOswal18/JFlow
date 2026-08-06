@@ -182,8 +182,13 @@ ollama ps
 
 The processor must show `100% GPU`. JFlow pre-warms the model in the background
 after its service starts and keeps it warm for 15 minutes after use. If Ollama
-is unavailable, GPU loading fails, or a request exceeds seven seconds, JFlow
+is unavailable, GPU loading fails, or a request exceeds ten seconds, JFlow
 inserts the unformatted Scribe result and marks that delivery in History.
+
+When the active browser window's local title identifies LinkedIn, JFlow sends
+the formatter a fixed LinkedIn-post style hint: a concise hook, short
+professional first-person paragraphs, and an optional standalone reveal line.
+The page title and URL are never sent to Ollama or any cloud service.
 
 ## JFlow Library
 

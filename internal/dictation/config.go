@@ -122,7 +122,7 @@ func DefaultConfig() Config {
 		// call can leave microphone capture stuck while the key is held.
 		ASR:       ASRConfig{Provider: "elevenlabs_batch", APIKeyEnv: "ELEVENLABS_API_KEY", Language: "eng", Secondary: []string{"hin"}, NoVerbatim: true, Model: "scribe_v2", Endpoint: "https://api.elevenlabs.io/v1/speech-to-text"},
 		Cleanup:   CleanupConfig{Enabled: false, APIKeyEnv: "LLM_API_KEY", Endpoint: "", Model: ""},
-		Formatter: FormatterConfig{Mode: "auto", Endpoint: "http://127.0.0.1:11434", Model: "qwen3:1.7b", MinRecordingSecs: 15, TimeoutSecs: 7, KeepAlive: "15m", ContextTokens: 2048, MaxOutputTokens: 320},
+		Formatter: FormatterConfig{Mode: "auto", Endpoint: "http://127.0.0.1:11434", Model: "qwen3:1.7b", MinRecordingSecs: 15, TimeoutSecs: 10, KeepAlive: "15m", ContextTokens: 2048, MaxOutputTokens: 320},
 		Langfuse:  LangfuseConfig{Enabled: true, BaseURL: "https://cloud.langfuse.com", PublicKeyEnv: "LANGFUSE_PUBLIC_KEY", SecretKeyEnv: "LANGFUSE_SECRET_KEY", SyncIntervalSecs: 30, TimeoutSecs: 8},
 		HandsFree: HandsFreeConfig{Enabled: true, SilenceSecs: 1.4, MinSpeechSecs: 0.4, VoiceThreshold: 650},
 		UI:        UIConfig{Enabled: true},
@@ -174,7 +174,7 @@ func LoadConfig(path string) (Config, error) {
 		cfg.Formatter.MinRecordingSecs = 15
 	}
 	if cfg.Formatter.TimeoutSecs <= 0 {
-		cfg.Formatter.TimeoutSecs = 7
+		cfg.Formatter.TimeoutSecs = 10
 	}
 	if cfg.Formatter.KeepAlive == "" {
 		cfg.Formatter.KeepAlive = "15m"

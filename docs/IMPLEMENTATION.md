@@ -243,17 +243,22 @@ because it requires your own speech samples and provider account access.
 
 Phase 3 treats context as a weak signal, not a rigid per-application template.
 At recording start JFlow snapshots the active Hyprland class, title, and PID.
-It looks for a small set of high-confidence categories locally: AI assistant,
-professional message, casual message, or terminal running an AI assistant.
-Only a fixed one-line result can reach Qwen; unrecognised contexts receive no
-hint. This avoids both browser-title prompt injection and overfitting all text
-from a particular application to one style.
+It looks for a small set of high-confidence categories locally: LinkedIn post,
+AI assistant, professional message, casual message, or terminal running an AI
+assistant. Only a fixed one-line result can reach Qwen; unrecognised contexts
+receive no hint. This avoids both browser-title prompt injection and
+overfitting all text from a particular application to one style.
+
+The LinkedIn hint asks for a short hook, one-to-three-sentence professional
+first-person paragraphs, and a standalone reveal line only when the spoken
+text naturally contains one. Browser title and URL remain local and are never
+included in the prompt.
 
 The formatter is intentionally post-ASR, local-only, and bounded:
 
 - enabled for recordings strictly longer than 15 seconds;
 - Qwen3 1.7B Q4 via local Ollama, non-thinking mode, 2K context, 320-token
-  output cap, seven-second deadline, 15-minute keep-alive;
+  output cap, ten-second deadline, 15-minute keep-alive;
 - Qwen returns a strict local layout plan; JFlow renders its chosen paragraph,
   bullet, or numbered structure deterministically. Narrative paragraph breaks
   are model-selected sentence boundaries rendered locally. It does not add a

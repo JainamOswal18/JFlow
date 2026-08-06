@@ -8,6 +8,7 @@ func TestInferContextHintUsesSmallSafeVocabulary(t *testing.T) {
 		want   string
 	}{
 		{WindowTarget{Class: "brave", Title: "ChatGPT - new chat"}, "AI-assistant request"},
+		{WindowTarget{Class: "brave-browser", Title: "Create a post | LinkedIn"}, "LinkedIn post"},
 		{WindowTarget{Class: "thunderbird", Title: "Compose"}, "professional message"},
 		{WindowTarget{Class: "discord", Title: "general"}, "casual message"},
 		{WindowTarget{Class: "brave", Title: "Some private document"}, ""},

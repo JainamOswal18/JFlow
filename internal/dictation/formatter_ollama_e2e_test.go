@@ -23,7 +23,7 @@ func TestOllamaFormatterE2E(t *testing.T) {
 	cfg := DefaultConfig().Formatter
 	cfg.Model = model
 	// A comparison run may have to load a model after another one was used.
-	// Production keeps its selected model warm and retains its seven-second
+	// Production keeps its selected model warm and retains its ten-second
 	// deadline; this test gives the explicit benchmark a bounded cold-start
 	// allowance without changing production behavior.
 	cfg.TimeoutSecs = 30
@@ -31,6 +31,7 @@ func TestOllamaFormatterE2E(t *testing.T) {
 	cases := []struct {
 		name      string
 		raw       string
+		hint      string
 		wantParts []string
 		forbid    string
 		minBreaks int
@@ -66,13 +67,24 @@ func TestOllamaFormatterE2E(t *testing.T) {
 			wantParts: []string{"favorite writing tool", "Wispr Flow", "Meet JFlow", "UNDER THE HOOD", "1. ElevenLabs Scribe", "2. A local Qwen", "3. Everything stored locally"},
 			minBreaks: 3,
 		},
+		{
+			name:      "linkedin post from spoken story",
+			raw:       "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next three days. I had just left my last job and moved back to Arch Linux. The first thing I missed, WisprFlow. Nothing like it existed for Hyprland or Wayland. So instead of waiting around, I built my own. Meet JFlow. Hold a key, speak, release. Plain text lands wherever you were typing. No live transcript cluttering your screen, no lost recordings if a provider hiccups mid-transaction.",
+			hint:      "Active style: LinkedIn post. Keep a confident first-person professional voice; use a short hook, 1 to 3 sentence paragraphs, and a standalone product/reveal line when natural. Use a list only for genuine takeaways; do not add claims or a call to action.",
+			wantParts: []string{"favorite writing tool", "WisprFlow", "Meet JFlow", "Plain text lands", "No live transcript"},
+			minBreaks: 3,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			hint := tc.hint
+			if hint == "" {
+				hint = "Likely context: an AI-assistant request. Prefer clear structure."
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			result, err := FormatWithOllama(ctx, tc.raw, "Likely context: an AI-assistant request. Prefer clear structure.", cfg)
+			result, err := FormatWithOllama(ctx, tc.raw, hint, cfg)
 			if err != nil {
 				t.Fatalf("formatter request failed: %v; audit=%+v", err, result.Audit)
 			}
