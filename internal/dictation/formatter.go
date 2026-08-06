@@ -27,9 +27,10 @@ var (
 	shortActionSentence      = regexp.MustCompile(`(?i)^(?:hold|press|open|click|type|say|write|speak|release|copy|paste|run)\b`)
 	inlineListHeading        = regexp.MustCompile(`(?i)([[:alpha:]][^.!?\n]{0,80}):\s*1[.)]\s+`)
 	inlineLaterListMarker    = regexp.MustCompile(`\s+[2-9][0-9]*[.)]\s+`)
-	inlineSpokenListHeading  = regexp.MustCompile(`(?i)([[:alpha:]][[:alpha:] ]{1,60}?)\s+one,\s+`)
+	inlineSpokenListHeading  = regexp.MustCompile(`(?i)([[:alpha:]][[:alpha:] ]{1,60}?)(?:\s*:\s*|\s+)one,\s+`)
 	inlineSpokenSecondMarker = regexp.MustCompile(`(?i)\s+two,\s+`)
 	inlineSpokenThirdMarker  = regexp.MustCompile(`(?i)\s+three,\s+`)
+	shortClosingSentence     = regexp.MustCompile(`(?i)^(?:code'?s here|github link|learn more|read more|try it)\b`)
 	spokenOrdinalMarker      = regexp.MustCompile(`(?i)\b(?:the\s+)?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th)(?:\s+thing)?(?:\s+i\s+want\s+you\s+to\s+do)?(?:\s+is)?(?:\s+to)?\s*`)
 	trailingOrdinalConnector = regexp.MustCompile(`(?i)[,;]?\s*and\s*$`)
 )
@@ -246,9 +247,17 @@ func renderNumberedSection(prose, heading string, items []string, tail string, b
 	}
 	if tail = strings.TrimSpace(tail); tail != "" {
 		b.WriteString("\n\n")
-		b.WriteString(renderParagraphBreaks(tail, nil))
+		b.WriteString(renderClosingParagraphs(tail))
 	}
 	return b.String()
+}
+
+func renderClosingParagraphs(text string) string {
+	sentences := splitSentences(text)
+	if len(sentences) < 2 || !shortClosingSentence.MatchString(sentences[len(sentences)-1]) {
+		return text
+	}
+	return strings.Join(sentences[:len(sentences)-1], " ") + "\n\n" + sentences[len(sentences)-1]
 }
 
 func extractInlineNumberedList(text string) (prose, heading string, items []string, ok bool) {

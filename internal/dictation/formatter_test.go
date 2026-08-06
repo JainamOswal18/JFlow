@@ -141,11 +141,11 @@ func TestRenderFormatterPlan(t *testing.T) {
 	if got != want {
 		t.Fatalf("rendered inline numbered section = %q, want %q", got, want)
 	}
-	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"Hold a key, speak, release. Under the hood one, ElevenLabs Scribe V2 for transcription. Two, a local Qwen model for formatting. Three, everything is stored locally."}})
+	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"Hold a key, speak, release. Under the hood: one, ElevenLabs Scribe V2 for transcription. Two, a local Qwen model running on my own GPU for formatting longer dictations. Three, everything stored locally, audio auto deleted after an hour. Sometimes the fastest way to get a tool you need isn't waiting for someone to build it. It's a free weekend, free tier APIs, and enough annoyance to push through. Code's here if you're curious: GitHub link."}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want = "Hold a key, speak, release.\n\nUNDER THE HOOD:\n\n1. ElevenLabs Scribe V2 for transcription.\n2. A local Qwen model for formatting.\n3. Everything is stored locally."
+	want = "Hold a key, speak, release.\n\nUNDER THE HOOD:\n\n1. ElevenLabs Scribe V2 for transcription.\n2. A local Qwen model running on my own GPU for formatting longer dictations.\n3. Everything stored locally, audio auto deleted after an hour.\n\nSometimes the fastest way to get a tool you need isn't waiting for someone to build it. It's a free weekend, free tier APIs, and enough annoyance to push through.\n\nCode's here if you're curious: GitHub link."
 	if got != want {
 		t.Fatalf("rendered spoken inline numbered section = %q, want %q", got, want)
 	}
