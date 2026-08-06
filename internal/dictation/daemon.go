@@ -529,14 +529,6 @@ func (d *Daemon) CancelIfRecording() error {
 	if d.isRecording() {
 		return d.Cancel()
 	}
-	d.mu.Lock()
-	cancel := d.processingCancel
-	d.mu.Unlock()
-	if cancel == nil {
-		return nil
-	}
-	cancel()
-	d.setStatus("processing", "Cancelling")
 	return nil
 }
 func (d *Daemon) Retry(id string) error {
@@ -1224,17 +1216,30 @@ func wtypeCommands(text string) [][]string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	lines := strings.Split(text, "\n")
-	commands := make([][]string, 0, len(lines)*2)
+	args := make([]string, 0, len(lines)*5)
 	for i, line := range lines {
 		if line != "" {
-			// -- ensures a dictated line beginning with '-' is text, not an option.
-			commands = append(commands, []string{"--", line})
+			// wtype parses option-looking arguments even in a mixed sequence. Emit a
+			// leading dash as a named key so bullet lines stay literal.
+			if strings.HasPrefix(line, "-") {
+				args = append(args, "-k", "minus")
+				line = strings.TrimPrefix(line, "-")
+			}
+			if line != "" {
+				args = append(args, line)
+			}
 		}
 		if i < len(lines)-1 {
-			commands = append(commands, []string{"-M", "shift", "-k", "Return"})
+			// Keep a literal newline in chat fields without submitting. Keeping the
+			// whole sequence in one process prevents a long formatted post from
+			// exhausting the old shared two-second process-startup budget.
+			args = append(args, "-M", "shift", "-k", "Return", "-m", "shift")
 		}
 	}
-	return commands
+	if len(args) == 0 {
+		return nil
+	}
+	return [][]string{args}
 }
 func notify(title, body string) {
 	_ = exec.Command("notify-send", "--app-name=dictationd", title, body).Run()

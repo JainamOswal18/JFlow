@@ -184,13 +184,10 @@ func TestFreshFormattingInfoClearsOldAttemptState(t *testing.T) {
 	}
 }
 
-func TestWtypeCommandsUseShiftEnterForLineBreaks(t *testing.T) {
+func TestWtypeCommandsUseOneProcessForMultilineText(t *testing.T) {
 	got := wtypeCommands("first line\n\n-second line")
 	want := [][]string{
-		{"--", "first line"},
-		{"-M", "shift", "-k", "Return"},
-		{"-M", "shift", "-k", "Return"},
-		{"--", "-second line"},
+		{"first line", "-M", "shift", "-k", "Return", "-m", "shift", "-M", "shift", "-k", "Return", "-m", "shift", "-k", "minus", "second line"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("commands = %#v, want %#v", got, want)
