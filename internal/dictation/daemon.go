@@ -971,7 +971,7 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		d.setStatus("processing", "Transcribing")
 		// Short-form dictation should not sit in Transcribing for a minute.
 		// A timed-out request is preserved locally and gets one quick retry.
-		pctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		pctx, cancel := context.WithTimeout(ctx, asrDeadline(job.Attempts))
 		requestCfg := d.cfg
 		// Canonical vocabulary terms bias Scribe toward the spelling the user
 		// chose. Learned aliases stay local and are never sent to ElevenLabs.
@@ -1220,6 +1220,15 @@ func typingDeadline(text string) time.Duration {
 		seconds = maxSeconds
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+// asrDeadline keeps first-attempt dictation responsive while giving a saved
+// recording one longer, still-bounded chance when the cloud provider is slow.
+func asrDeadline(previousAttempts int) time.Duration {
+	if previousAttempts > 0 {
+		return 45 * time.Second
+	}
+	return 25 * time.Second
 }
 
 const linkedInFooter = "— Written using JFlow"

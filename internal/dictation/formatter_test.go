@@ -230,6 +230,18 @@ func TestTypingDeadlineHasTenSecondFloorAndScalesForLongPosts(t *testing.T) {
 	}
 }
 
+func TestASRDeadlineGivesSavedAudioRetriesMoreTime(t *testing.T) {
+	if got := asrDeadline(0); got != 25*time.Second {
+		t.Fatalf("initial ASR deadline = %s, want 25s", got)
+	}
+	if got := asrDeadline(1); got != 45*time.Second {
+		t.Fatalf("retry ASR deadline = %s, want 45s", got)
+	}
+	if got := asrDeadline(4); got != 45*time.Second {
+		t.Fatalf("later retry ASR deadline = %s, want bounded 45s", got)
+	}
+}
+
 func TestAppendLinkedInFooterIsFinalAndIdempotent(t *testing.T) {
 	linkedin := WindowTarget{Class: "brave-browser", Title: "Feed | LinkedIn - Brave"}
 	got := appendLinkedInFooter("A post about JFlow.", linkedin)
