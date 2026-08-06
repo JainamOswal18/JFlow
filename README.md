@@ -226,6 +226,19 @@ The benchmark is refused while JFlow is recording or processing. It reports
 each model's output and latency for review; it never selects a model, changes
 history, or uses any cloud transcription credits.
 
+For a repeatable smoke test of the complete local formatter request/response
+path (prompt, Ollama JSON contract, plan validation, and renderer), use only
+synthetic text:
+
+```bash
+JFLOW_OLLAMA_E2E=1 JFLOW_OLLAMA_MODEL=qwen3:1.7b \
+  go test ./internal/dictation -run '^TestOllamaFormatterE2E$' -v -count=1
+```
+
+This test is opt-in and never records audio, reads your history, or makes a
+cloud transcription request. Use the same command with another installed model
+name to compare it fairly before changing `formatter.model`.
+
 ## Sounds
 
 ```json
