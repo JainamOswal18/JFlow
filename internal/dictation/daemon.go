@@ -1026,7 +1026,7 @@ func (d *Daemon) process(ctx context.Context, id string) {
 			job.Formatting.Changed = text != originalText
 		}
 	}
-	job.FinalText = text
+	job.FinalText = appendLinkedInFooter(text, job.Target)
 	if job.Formatting.Eligible && d.langfuse != nil {
 		// Queueing is local and atomic. Network synchronization happens on its
 		// own worker, never in the dictation or insertion path.
@@ -1206,11 +1206,35 @@ func typeText(text string) error {
 // typingDeadline gives a long virtual-keyboard stream enough time to reach
 // the focused client, while retaining a hard bound when Wayland input stalls.
 func typingDeadline(text string) time.Duration {
-	seconds := 2 + (len([]rune(text))+399)/400
-	if seconds > 12 {
-		seconds = 12
+	const (
+		baseSeconds    = 10
+		includedRunes  = 800
+		runesPerSecond = 200
+		maxSeconds     = 30
+	)
+	seconds := baseSeconds
+	if runes := len([]rune(text)); runes > includedRunes {
+		seconds += (runes - includedRunes + runesPerSecond - 1) / runesPerSecond
+	}
+	if seconds > maxSeconds {
+		seconds = maxSeconds
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+const linkedInFooter = "— Written using JFlow"
+
+// appendLinkedInFooter runs after every optional text transformation, so the
+// attribution is the final visible line in delivery, history, retries, and the
+// clipboard recovery path. It is never part of a Scribe or Ollama request.
+func appendLinkedInFooter(text string, target WindowTarget) string {
+	if !isLinkedInTarget(target) || strings.TrimSpace(text) == "" {
+		return text
+	}
+	if strings.HasSuffix(strings.TrimSpace(text), linkedInFooter) {
+		return text
+	}
+	return strings.TrimRight(text, " \t\r\n") + "\n\n" + linkedInFooter
 }
 
 // wtype treats newlines in text as Enter keypresses. In chat applications

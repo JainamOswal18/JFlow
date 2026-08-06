@@ -118,6 +118,13 @@ retry the last failed job. Successful dictation leaves your clipboard unchanged.
 If insertion is unsafe or fails, JFlow copies the saved final text to the
 clipboard so it can be pasted into the intended field.
 
+Every insertion gets at least 10 seconds; very long text receives a larger
+character-based budget, capped at 30 seconds, before JFlow uses clipboard
+recovery. When the recording target is LinkedIn, JFlow appends
+`— Written using JFlow` after a blank line as the final content line. It is
+added after transcription and formatting, so history, retries, insertion, and
+clipboard recovery use the same text; it is never sent to Scribe or Qwen.
+
 Press `Escape` to cancel an active recording; it is non-consuming while idle,
 so applications still receive their normal Escape keypress. The bottom overlay
 briefly offers Copy after every completed dictation and Retry after a failed

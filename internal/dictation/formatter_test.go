@@ -218,6 +218,34 @@ func TestWtypeCommandsUseOneProcessForMultilineText(t *testing.T) {
 	}
 }
 
+func TestTypingDeadlineHasTenSecondFloorAndScalesForLongPosts(t *testing.T) {
+	if got := typingDeadline("short note"); got != 10*time.Second {
+		t.Fatalf("short insertion deadline = %s, want 10s", got)
+	}
+	if got := typingDeadline(strings.Repeat("x", 1201)); got <= 10*time.Second {
+		t.Fatalf("long insertion deadline = %s, want more than 10s", got)
+	}
+	if got := typingDeadline(strings.Repeat("x", 10000)); got != 30*time.Second {
+		t.Fatalf("very long insertion deadline = %s, want 30s cap", got)
+	}
+}
+
+func TestAppendLinkedInFooterIsFinalAndIdempotent(t *testing.T) {
+	linkedin := WindowTarget{Class: "brave-browser", Title: "Feed | LinkedIn - Brave"}
+	got := appendLinkedInFooter("A post about JFlow.", linkedin)
+	want := "A post about JFlow.\n\n— Written using JFlow"
+	if got != want {
+		t.Fatalf("LinkedIn footer = %q, want %q", got, want)
+	}
+	if gotAgain := appendLinkedInFooter(got, linkedin); gotAgain != want {
+		t.Fatalf("LinkedIn footer duplicated: %q", gotAgain)
+	}
+	nonLinkedIn := appendLinkedInFooter("A post about JFlow.", WindowTarget{Class: "kitty", Title: "terminal"})
+	if nonLinkedIn != "A post about JFlow." {
+		t.Fatalf("non-LinkedIn text changed: %q", nonLinkedIn)
+	}
+}
+
 func TestExpectedPipeClose(t *testing.T) {
 	if !isExpectedPipeClose(os.ErrClosed) {
 		t.Fatal("os.ErrClosed should be treated as an expected close after stopping capture")

@@ -83,6 +83,24 @@ func TestPipelineE2EFormatterFailureKeepsScribeText(t *testing.T) {
 	}
 }
 
+func TestPipelineE2ELinkedInFooterIsPersistedAndDeliveredLast(t *testing.T) {
+	server := pipelineServer(t, http.StatusOK)
+	defer server.Close()
+	d, cfg, cleanup := newPipelineDaemon(t, server.URL)
+	defer cleanup()
+
+	target := WindowTarget{Address: "0x1", Class: "brave-browser", Title: "Feed | LinkedIn - Brave"}
+	job := enqueuePipelineJobForTarget(t, d, cfg, 16, target, InferContextHint(target))
+	got := waitForJob(t, d.store, job.ID, StatusDelivered)
+	if !strings.HasSuffix(got.FinalText, "\n\n— Written using JFlow") {
+		t.Fatalf("LinkedIn footer is not the final text: %q", got.FinalText)
+	}
+	inserted, err := os.ReadFile(os.Getenv("JFLOW_TEST_WTYPE_LOG"))
+	if err != nil || !strings.Contains(string(inserted), "— Written using JFlow") {
+		t.Fatalf("wtype log=%q err=%v", inserted, err)
+	}
+}
+
 func TestPipelineE2EExplicitSelectionLearnsVocabulary(t *testing.T) {
 	server := pipelineServer(t, http.StatusOK)
 	defer server.Close()
@@ -196,8 +214,12 @@ func newPipelineDaemon(t *testing.T, endpoint string) (*Daemon, Config, func()) 
 }
 
 func enqueuePipelineJob(t *testing.T, d *Daemon, cfg Config, seconds float64) *Job {
+	return enqueuePipelineJobForTarget(t, d, cfg, seconds, WindowTarget{Address: "0x1", Class: "brave", Title: "ChatGPT"}, "Likely context: an AI-assistant request.")
+}
+
+func enqueuePipelineJobForTarget(t *testing.T, d *Daemon, cfg Config, seconds float64, target WindowTarget, hint string) *Job {
 	t.Helper()
-	job := &Job{ID: fmt.Sprintf("e2e-%d", time.Now().UnixNano()), Status: StatusQueued, CreatedAt: time.Now().UTC(), AudioPath: d.store.AudioPath(fmt.Sprintf("e2e-%d", time.Now().UnixNano())), Target: WindowTarget{Address: "0x1", Class: "brave", Title: "ChatGPT"}, RecordingSeconds: seconds, Formatting: FormattingInfo{ContextHint: "Likely context: an AI-assistant request."}}
+	job := &Job{ID: fmt.Sprintf("e2e-%d", time.Now().UnixNano()), Status: StatusQueued, CreatedAt: time.Now().UTC(), AudioPath: d.store.AudioPath(fmt.Sprintf("e2e-%d", time.Now().UnixNano())), Target: target, RecordingSeconds: seconds, Formatting: FormattingInfo{ContextHint: hint}}
 	// Keep ID and audio path in the same durable job directory.
 	job.AudioPath = d.store.AudioPath(job.ID)
 	if err := os.MkdirAll(filepath.Dir(job.AudioPath), 0700); err != nil {

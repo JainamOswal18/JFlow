@@ -13,7 +13,7 @@ import (
 func InferContextHint(target WindowTarget) string {
 	meta := strings.ToLower(target.Class + " " + target.Title)
 	switch {
-	case containsAny(meta, "linkedin"):
+	case isLinkedInTarget(target):
 		return "Active style: LinkedIn post. Keep a confident first-person professional voice; use a short hook, 1 to 3 sentence paragraphs, and a standalone product/reveal line when natural. Use a list only for genuine takeaways; do not add claims or a call to action."
 	case containsAny(meta, "chatgpt", "claude", "gemini", "perplexity", "copilot"):
 		return "Active style: AI-assistant request. For multi-part requests, short ALL-CAPS headings, - or numbered lists, and **bold** are allowed when they improve clarity."
@@ -26,6 +26,10 @@ func InferContextHint(target WindowTarget) string {
 		return "Active style: AI-assistant request. For multi-part requests, short ALL-CAPS headings, - or numbered lists, and **bold** are allowed when they improve clarity."
 	}
 	return ""
+}
+
+func isLinkedInTarget(target WindowTarget) bool {
+	return containsAny(strings.ToLower(target.Class+" "+target.Title), "linkedin")
 }
 
 func containsAny(text string, values ...string) bool {
