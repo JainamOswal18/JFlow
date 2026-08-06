@@ -1196,17 +1196,28 @@ func copyClipboard(text string) error {
 }
 
 func typeText(text string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	timeout := typingDeadline(text)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	for _, args := range wtypeCommands(text) {
 		if err := exec.CommandContext(ctx, "wtype", args...).Run(); err != nil {
 			if ctx.Err() != nil {
-				return fmt.Errorf("wtype timed out after 2 seconds: %w", ctx.Err())
+				return fmt.Errorf("wtype timed out after %s: %w", timeout, ctx.Err())
 			}
 			return fmt.Errorf("wtype %q: %w", args, err)
 		}
 	}
 	return nil
+}
+
+// typingDeadline gives a long virtual-keyboard stream enough time to reach
+// the focused client, while retaining a hard bound when Wayland input stalls.
+func typingDeadline(text string) time.Duration {
+	seconds := 2 + (len([]rune(text))+399)/400
+	if seconds > 12 {
+		seconds = 12
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // wtype treats newlines in text as Enter keypresses. In chat applications

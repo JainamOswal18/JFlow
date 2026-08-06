@@ -141,6 +141,14 @@ func TestRenderFormatterPlan(t *testing.T) {
 	if got != want {
 		t.Fatalf("rendered inline numbered section = %q, want %q", got, want)
 	}
+	got, err = renderFormatterPlan(formatterPlan{Layout: "paragraph", Content: []string{"Hold a key, speak, release. Under the hood one, ElevenLabs Scribe V2 for transcription. Two, a local Qwen model for formatting. Three, everything is stored locally."}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "Hold a key, speak, release.\n\nUNDER THE HOOD:\n\n1. ElevenLabs Scribe V2 for transcription.\n2. A local Qwen model for formatting.\n3. Everything is stored locally."
+	if got != want {
+		t.Fatalf("rendered spoken inline numbered section = %q, want %q", got, want)
+	}
 	got, err = renderFormatterPlan(formatterPlan{Layout: "numbered", Content: []string{"1. First task\n2. Second task"}})
 	if err != nil {
 		t.Fatal(err)

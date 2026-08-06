@@ -27,6 +27,9 @@ var (
 	shortActionSentence      = regexp.MustCompile(`(?i)^(?:hold|press|open|click|type|say|write|speak|release|copy|paste|run)\b`)
 	inlineListHeading        = regexp.MustCompile(`(?i)([[:alpha:]][^.!?\n]{0,80}):\s*1[.)]\s+`)
 	inlineLaterListMarker    = regexp.MustCompile(`\s+[2-9][0-9]*[.)]\s+`)
+	inlineSpokenListHeading  = regexp.MustCompile(`(?i)([[:alpha:]][[:alpha:] ]{1,60}?)\s+one,\s+`)
+	inlineSpokenSecondMarker = regexp.MustCompile(`(?i)\s+two,\s+`)
+	inlineSpokenThirdMarker  = regexp.MustCompile(`(?i)\s+three,\s+`)
 	spokenOrdinalMarker      = regexp.MustCompile(`(?i)\b(?:the\s+)?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th)(?:\s+thing)?(?:\s+i\s+want\s+you\s+to\s+do)?(?:\s+is)?(?:\s+to)?\s*`)
 	trailingOrdinalConnector = regexp.MustCompile(`(?i)[,;]?\s*and\s*$`)
 )
@@ -217,9 +220,17 @@ func renderFormatterPlan(plan formatterPlan) (string, error) {
 // readable numbered section after paragraphing the preceding prose.
 func renderMixedParagraphs(text string, breakAfter []int) string {
 	prose, heading, items, ok := extractInlineNumberedList(text)
-	if !ok {
-		return renderParagraphBreaks(text, breakAfter)
+	if ok {
+		return renderNumberedSection(prose, heading, items, "", breakAfter)
 	}
+	prose, heading, items, tail, ok := extractInlineSpokenNumberedList(text)
+	if ok {
+		return renderNumberedSection(prose, heading, items, tail, breakAfter)
+	}
+	return renderParagraphBreaks(text, breakAfter)
+}
+
+func renderNumberedSection(prose, heading string, items []string, tail string, breakAfter []int) string {
 	var b strings.Builder
 	b.WriteString(renderParagraphBreaks(prose, breakAfter))
 	if b.Len() > 0 {
@@ -232,6 +243,10 @@ func renderMixedParagraphs(text string, breakAfter []int) string {
 		if index < len(items)-1 {
 			b.WriteByte('\n')
 		}
+	}
+	if tail = strings.TrimSpace(tail); tail != "" {
+		b.WriteString("\n\n")
+		b.WriteString(renderParagraphBreaks(tail, nil))
 	}
 	return b.String()
 }
@@ -265,6 +280,44 @@ func extractInlineNumberedList(text string) (prose, heading string, items []stri
 		return "", "", nil, false
 	}
 	return prose, heading, items, true
+}
+
+// extractInlineSpokenNumberedList accepts the common STT form “Under the
+// hood one, ... Two, ... Three, ...” without treating ordinary prose as a
+// list. It requires all three adjacent spoken markers and a short heading.
+func extractInlineSpokenNumberedList(text string) (prose, heading string, items []string, tail string, ok bool) {
+	first := inlineSpokenListHeading.FindStringSubmatchIndex(text)
+	if first == nil {
+		return "", "", nil, "", false
+	}
+	second := inlineSpokenSecondMarker.FindStringIndex(text[first[1]:])
+	if second == nil {
+		return "", "", nil, "", false
+	}
+	secondStart, secondEnd := first[1]+second[0], first[1]+second[1]
+	third := inlineSpokenThirdMarker.FindStringIndex(text[secondEnd:])
+	if third == nil {
+		return "", "", nil, "", false
+	}
+	thirdStart, thirdEnd := secondEnd+third[0], secondEnd+third[1]
+	end := len(text)
+	if boundary := sentenceBoundary.FindStringIndex(text[thirdEnd:]); boundary != nil {
+		end = thirdEnd + boundary[1]
+	}
+	trimItem := func(value string) string {
+		return sentenceCase(strings.Trim(value, " \t\r\n,;:"))
+	}
+	items = []string{trimItem(text[first[1]:secondStart]), trimItem(text[secondEnd:thirdStart]), trimItem(text[thirdEnd:end])}
+	if items[0] == "" || items[1] == "" || items[2] == "" {
+		return "", "", nil, "", false
+	}
+	prose = strings.TrimSpace(text[:first[0]])
+	heading = strings.TrimSpace(text[first[2]:first[3]])
+	tail = strings.TrimSpace(text[end:])
+	if prose == "" || heading == "" {
+		return "", "", nil, "", false
+	}
+	return prose, heading, items, tail, true
 }
 
 // renderParagraphBreaks turns model-selected sentence boundaries into visible
