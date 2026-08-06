@@ -21,7 +21,7 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"{\"text\":\"**Build a landing page.**\\n\\n- Use a dark theme\\n- Include pricing\"}"}}`)), Header: make(http.Header)}, nil
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"message":{"content":"{\"layout\":\"bullets\",\"paragraph\":\"\",\"prefix\":\"Build a landing page.\",\"items\":[\"- Use a dark theme\",\"Include pricing\"],\"suffix\":\"\"}"}}`)), Header: make(http.Header)}, nil
 	})}
 	defer func() { formatterHTTPClient = oldClient }()
 	cfg := DefaultConfig().Formatter
@@ -34,7 +34,7 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	if !strings.Contains(got, "dark theme") {
 		t.Fatalf("formatted text = %q", got)
 	}
-	if !strings.Contains(got, "**Build a landing page.**") || !strings.Contains(got, "- Use a dark theme") || strings.ContainsAny(got, "#`") {
+	if !strings.Contains(got, "Build a landing page:") || !strings.Contains(got, "- Use a dark theme") || strings.ContainsAny(got, "#`") {
 		t.Fatalf("formatter did not preserve approved plain-text structure: %q", got)
 	}
 	if result.Audit.HTTPStatus != http.StatusOK || result.Audit.Model != cfg.Model || result.Audit.RawResponse == "" || result.Audit.SystemPrompt == "" {
@@ -50,14 +50,36 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	if format["type"] != "object" || format["additionalProperties"] != false {
 		t.Fatalf("expected a strict JSON formatter contract: %#v", format)
 	}
+	properties := format["properties"].(map[string]any)
+	if properties["layout"] == nil || properties["items"] == nil {
+		t.Fatalf("expected structural formatter plan: %#v", format)
+	}
 	messages := payload["messages"].([]any)
 	system := messages[0].(map[string]any)["content"].(string)
-	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source text") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "Never summarize") || !strings.Contains(system, "MUST express them as a list") || !strings.Contains(system, "ALL-CAPS") {
+	if !strings.Contains(system, "Likely context") || !strings.Contains(system, "unreviewed source data") || !strings.Contains(system, "Never answer") || !strings.Contains(system, "JSON layout plan") || !strings.Contains(system, "comma-and conjunctions") || !strings.Contains(system, "grammatical person") {
 		t.Fatalf("unexpected system prompt: %q", system)
 	}
 	user := messages[1].(map[string]any)["content"].(string)
 	if !strings.Contains(user, "FORMAT ONLY THE QUOTED SOURCE DATA") || !strings.Contains(user, "<SOURCE>") || !strings.Contains(user, "Build a landing page use a dark theme") {
 		t.Fatalf("source text was not safely wrapped: %q", user)
+	}
+	ordered := formatterSourceMessage("1. First task\n2. Second task")
+	if !strings.Contains(ordered, "STRUCTURE REQUIREMENT") || !strings.Contains(ordered, "layout to numbered") {
+		t.Fatalf("explicit source ordering was not preserved in metadata: %q", ordered)
+	}
+}
+
+func TestRenderFormatterPlan(t *testing.T) {
+	got, err := renderFormatterPlan(formatterPlan{Layout: "bullets", Prefix: "I need", Items: []string{"- a fast local formatter", "accurate transcription", "reliable retries"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "I need:\n- a fast local formatter\n- accurate transcription\n- reliable retries"
+	if got != want {
+		t.Fatalf("rendered plan = %q, want %q", got, want)
+	}
+	if _, err := renderFormatterPlan(formatterPlan{Layout: "numbered", Items: []string{"only one"}}); err == nil {
+		t.Fatal("single-item list must be rejected")
 	}
 }
 

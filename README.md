@@ -77,11 +77,12 @@ short accidental utterance is discarded, and `Escape` cancels safely.
 
 JFlow formats recordings longer than 15 seconds after Scribe has returned its
 clean transcript. It uses local Qwen3 1.7B through Ollama; no extra cloud API
-key or ElevenLabs request is used. Formatter output uses readable text
-structure: ALL-CAPS headings, `-` or numbered lists, and optional `**bold**`
-rather than `#` headings or code blocks. JFlow uses a
-strict local JSON contract: dictated text is source data to edit, never a
-question for Qwen to answer. Each eligible job retains a local formatter audit:
+key or ElevenLabs request is used. Qwen chooses a compact JSON layout plan
+(paragraph, bullets, or numbered items); JFlow renders that plan itself, so
+list markers and numbering are consistent rather than being left to a free-form
+model reply. Dictated text is source data to edit, never a question for Qwen to
+answer. Qwen may remove fillers, correct grammar, and rephrase for clarity
+without changing meaning. Each eligible job retains a local formatter audit:
 the exact Ollama response body, model, effective system prompt, input text,
 HTTP status, and end-to-end local request latency. It follows the same history
 retention period as that job.
@@ -89,13 +90,17 @@ retention period as that job.
 When a dictation explicitly says “first”, “second”, “third”, and so on, JFlow
 locally converts that sequence into a numbered list before Qwen formats it. The
 job audit records this deterministic `spoken_ordinals_to_numbered_list` rule.
+It also passes an explicit `numbered` layout requirement to Qwen; Qwen can
+still improve each item's wording, but cannot collapse that clear sequence into
+an ordinary paragraph. JFlow renders the number markers, removing duplicate
+markers if the model retained them inside an item.
 
 The formatter receives the transcript and, only when confidently inferred from
 the active window, one short local context hint such as “AI-assistant request”,
 “professional message”, or “casual message”. Raw window titles and process
 arguments never go to the model. If context is uncertain, formatting is neutral.
 The model is instructed to preserve meaning and requirements, rather than
-answering, expanding, or rewriting the request.
+answering, expanding, or adding new information to the request.
 
 Install Ollama using its official installer, then start its system service:
 

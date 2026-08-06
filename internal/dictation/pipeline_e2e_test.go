@@ -27,7 +27,7 @@ func TestPipelineE2EFormatsAuditsDeliversAndAcceptsFeedback(t *testing.T) {
 	if got.Transcript != "please help me with the issue and brainstorm it" {
 		t.Fatalf("transcript = %q", got.Transcript)
 	}
-	if got.FinalText != "REQUEST\n1. Help me with the issue.\n2. Brainstorm it." {
+	if got.FinalText != "REQUEST:\n1. Help me with the issue.\n2. Brainstorm it." {
 		t.Fatalf("final text = %q", got.FinalText)
 	}
 	if !got.Formatting.Eligible || !got.Formatting.Applied || got.Formatting.RawResponse == "" || got.Formatting.SystemPrompt == "" {
@@ -133,7 +133,7 @@ func pipelineServer(t *testing.T, formatterStatus int) *httptest.Server {
 				_, _ = w.Write([]byte(`{"error":"temporarily unavailable"}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"message":{"content":"{\"text\":\"REQUEST\\n1. Help me with the issue.\\n2. Brainstorm it.\"}"}}`))
+			_, _ = w.Write([]byte(`{"message":{"content":"{\"layout\":\"numbered\",\"paragraph\":\"\",\"prefix\":\"REQUEST\",\"items\":[\"Help me with the issue.\",\"Brainstorm it.\"],\"suffix\":\"\"}"}}`))
 		default:
 			t.Fatalf("unexpected request path %s", r.URL.Path)
 		}

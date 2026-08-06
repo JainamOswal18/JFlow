@@ -78,10 +78,11 @@ so multiline formatter output stays in chat composers instead of submitting a
 message. Formatter output is constrained and normalized to plain text before
 insertion.
 
-The formatter uses readable text conventions rather than raw Markdown
-headings: ALL-CAPS headings, `-` or numbered lists, and optional `**bold**`
-when the selected local style permits it. Only the inferred active style is
-appended to the base formatter prompt.
+The formatter returns a strict JSON layout plan rather than free-form text:
+`paragraph`, `bullets`, or `numbered`, with optional lead-in and list items.
+Qwen chooses the semantic grouping and may clean up or rephrase for clarity;
+JFlow owns the visible `-` and `1.` syntax so rendering is deterministic. Only
+the inferred active style is appended to the base formatter prompt.
 
 For every eligible formatting request, the job metadata records the local Qwen
 model, formatter input, exact system prompt, HTTP status, end-to-end latency,
@@ -246,8 +247,12 @@ The formatter is intentionally post-ASR, local-only, and bounded:
 - enabled for recordings strictly longer than 15 seconds;
 - Qwen3 1.7B Q4 via local Ollama, non-thinking mode, 2K context, 320-token
   output cap, seven-second deadline, 15-minute keep-alive;
-- a non-empty formatter response is inserted as returned; JFlow does not apply
-  a second semantic rewrite or safety rewrite check;
+- Qwen returns a strict local layout plan; JFlow renders its chosen paragraph,
+  bullet, or numbered structure deterministically. It does not add a second
+  semantic rewrite or safety rewrite check;
+- an explicit spoken first/second/third sequence is normalized locally and
+  marked as a mandatory numbered layout for Qwen. The model may improve item
+  wording, while JFlow owns the final number markers;
 - an unavailable or timed-out local formatter delivers the original Scribe
   transcript, records the reason in history, and never retries or spends cloud
   transcription credits.
