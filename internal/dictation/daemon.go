@@ -779,7 +779,7 @@ func (d *Daemon) BenchmarkFormatter(models []string) ([]FormatterBenchmark, erro
 		var totalLatency int64
 		var completed int64
 		for _, entry := range dataset {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSecs)*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), formatterDeadline(entry.Input, cfg))
 			result, formatErr := FormatWithOllama(ctx, entry.Input, entry.ContextHint, cfg)
 			cancel()
 			item := FormatterBenchmarkCase{JobID: entry.JobID, Output: result.Text, LatencyMS: result.Audit.LatencyMS}
@@ -1017,7 +1017,6 @@ func (d *Daemon) process(ctx context.Context, id string) {
 		job.Status = StatusFormatting
 		_ = d.store.Save(job)
 		d.setStatus("processing", "Formatting")
-		formatCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.Formatter.TimeoutSecs)*time.Second)
 		originalText := text
 		beforeFormatting := originalText
 		preprocessRules := []string(nil)
@@ -1025,6 +1024,7 @@ func (d *Daemon) process(ctx context.Context, id string) {
 			beforeFormatting = normalized
 			preprocessRules = []string{"spoken_ordinals_to_numbered_list"}
 		}
+		formatCtx, cancel := context.WithTimeout(ctx, formatterDeadline(beforeFormatting, d.cfg.Formatter))
 		result, formatErr := FormatWithOllama(formatCtx, beforeFormatting, job.Formatting.ContextHint, d.cfg.Formatter)
 		cancel()
 		job.Formatting = result.Audit

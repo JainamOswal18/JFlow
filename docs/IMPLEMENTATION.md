@@ -258,7 +258,9 @@ The formatter is intentionally post-ASR, local-only, and bounded:
 
 - enabled for recordings strictly longer than 15 seconds;
 - Qwen3 1.7B Q4 via local Ollama, non-thinking mode, 2K context, 320-token
-  output cap, ten-second deadline, 15-minute keep-alive;
+  output cap, and 15-minute keep-alive. The local deadline is word-count
+  adaptive: 10 seconds through 100 words, 30 seconds through 250 words, and
+  60 seconds thereafter;
 - Qwen returns a strict local layout plan; JFlow renders its chosen paragraph,
   bullet, or numbered structure deterministically. Narrative paragraph breaks
   are model-selected sentence boundaries rendered locally. It does not add a

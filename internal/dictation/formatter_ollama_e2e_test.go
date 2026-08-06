@@ -69,9 +69,9 @@ func TestOllamaFormatterE2E(t *testing.T) {
 		},
 		{
 			name:      "linkedin post from spoken story",
-			raw:       "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next three days. I had just left my last job and moved back to Arch Linux. The first thing I missed, WisprFlow. Nothing like it existed for Hyprland or Wayland. So instead of waiting around, I built my own. Meet JFlow. Hold a key, speak, release. Plain text lands wherever you were typing. No live transcript cluttering your screen, no lost recordings if a provider hiccups mid-transaction.",
+			raw:       "I lost my favorite writing tool the day I switched back to Linux. Here's what I built in the next three days. I had just left my last job and moved back to Arch Linux. First thing I missed, WisprFlow. Nothing like it existed for Hyprland or Wayland. So instead of waiting around, I built my own. Meet JFlow. Hold the key, speak, release. Clean text lands wherever you're typing. No live transcript cluttering your screen. No lost recording if a provider hiccups mid-transcription. Under the hood, one, ElevenLabs Scribe V2 for transcription, two, a local Qwen model running on my own GPU for handling long dictations. Three, everything stored locally. Audio auto-detected, deleted after an hour. Sometimes the fastest way to get a tool you need isn't waiting for someone to build it. It's a free weekend, free tier APIs, and enough annoyance to push through. Code's here if you're curious.",
 			hint:      "Active style: LinkedIn post. Keep a confident first-person professional voice; use a short hook, 1 to 3 sentence paragraphs, and a standalone product/reveal line when natural. Use a list only for genuine takeaways; do not add claims or a call to action.",
-			wantParts: []string{"favorite writing tool", "WisprFlow", "Meet JFlow", "Plain text lands", "No live transcript"},
+			wantParts: []string{"favorite writing tool", "WisprFlow", "Meet JFlow", "Clean text lands", "UNDER THE HOOD", "Sometimes the fastest way", "Code's here"},
 			minBreaks: 3,
 		},
 	}

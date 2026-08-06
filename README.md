@@ -182,8 +182,10 @@ ollama ps
 
 The processor must show `100% GPU`. JFlow pre-warms the model in the background
 after its service starts and keeps it warm for 15 minutes after use. If Ollama
-is unavailable, GPU loading fails, or a request exceeds ten seconds, JFlow
-inserts the unformatted Scribe result and marks that delivery in History.
+is unavailable, GPU loading fails, or a request exceeds its local deadline,
+JFlow inserts the unformatted Scribe result and marks that delivery in History.
+The baseline is 10 seconds for short dictations, 30 seconds above 100 words,
+and 60 seconds above 250 words; local Qwen uses no cloud credits while it runs.
 
 When the active browser window's local title identifies LinkedIn, JFlow sends
 the formatter a fixed LinkedIn-post style hint: a concise hook, short

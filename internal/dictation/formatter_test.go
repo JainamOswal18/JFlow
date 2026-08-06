@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
@@ -70,6 +71,21 @@ func TestFormatWithOllamaUsesSafeLocalPayload(t *testing.T) {
 	narrative := formatterSourceMessage("I moved to Linux. I missed a writing tool. Nothing comparable existed. So I built one. Meet JFlow.")
 	if !strings.Contains(narrative, "multi-beat spoken monologue") || !strings.Contains(narrative, "layout to paragraph") || !strings.Contains(narrative, "break_after") {
 		t.Fatalf("long narrative was not given paragraph metadata: %q", narrative)
+	}
+}
+
+func TestFormatterDeadlineScalesWithTranscriptSize(t *testing.T) {
+	cfg := DefaultConfig().Formatter
+	if got := formatterDeadline("a short dictation", cfg); got != 10*time.Second {
+		t.Fatalf("short deadline = %s, want 10s", got)
+	}
+	medium := strings.Repeat("word ", 101)
+	if got := formatterDeadline(medium, cfg); got != 30*time.Second {
+		t.Fatalf("medium deadline = %s, want 30s", got)
+	}
+	long := strings.Repeat("word ", 251)
+	if got := formatterDeadline(long, cfg); got != 60*time.Second {
+		t.Fatalf("long deadline = %s, want 60s", got)
 	}
 }
 

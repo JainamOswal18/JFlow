@@ -36,6 +36,7 @@ type FormattingInfo struct {
 	Endpoint        string   `json:"endpoint,omitempty"`
 	ContextTokens   int      `json:"context_tokens,omitempty"`
 	MaxOutput       int      `json:"max_output_tokens,omitempty"`
+	DeadlineSecs    int      `json:"deadline_seconds,omitempty"`
 	HTTPStatus      int      `json:"http_status,omitempty"`
 	LatencyMS       int64    `json:"latency_ms,omitempty"`
 	RawResponse     string   `json:"raw_response,omitempty"`

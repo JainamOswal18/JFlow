@@ -45,6 +45,23 @@ type formatterPlan struct {
 	BreakAfter []int    `json:"break_after"`
 }
 
+// formatterDeadline keeps short dictations responsive without treating a
+// longer post as a failed formatter request. The configured timeout is the
+// baseline; substantial transcripts receive additional local-only time.
+func formatterDeadline(raw string, cfg FormatterConfig) time.Duration {
+	seconds := cfg.TimeoutSecs
+	if seconds <= 0 {
+		seconds = 10
+	}
+	words := len(strings.Fields(raw))
+	if words > 250 && seconds < 60 {
+		seconds = 60
+	} else if words > 100 && seconds < 30 {
+		seconds = 30
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 // FormatWithOllama makes one non-streaming local request. It never sends
 // window metadata, credentials, or audio; only the already-transcribed text
 // and a fixed, sanitized context hint can leave the daemon process.
@@ -58,6 +75,7 @@ func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig
 		Endpoint:      endpoint,
 		ContextTokens: cfg.ContextTokens,
 		MaxOutput:     cfg.MaxOutputTokens,
+		DeadlineSecs:  int(formatterDeadline(raw, cfg).Seconds()),
 	}}
 	defer func() { result.Audit.LatencyMS = time.Since(started).Milliseconds() }()
 	if cfg.Mode != "auto" {
