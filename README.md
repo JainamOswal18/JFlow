@@ -1,8 +1,62 @@
 # JFlow (`dictationd`)
 
-A local-first, push-to-talk dictation service for Hyprland. It writes audio to
-disk as you speak, sends it to Scribe v2 when you release the hotkey, optionally
-applies conservative cleanup, and inserts final text once.
+> A local-first, Wispr Flow-inspired dictation app for Arch Linux, Hyprland,
+> and Wayland.
+
+## Description
+
+JFlow is a push-to-talk writing workflow: hold a key, speak, release, and have
+cleaned text inserted into the app you were using. It captures through
+PipeWire, retains the recording locally while it works, transcribes with
+ElevenLabs Scribe v2, and can format longer dictations with a local Qwen model.
+It deliberately has no distracting live transcript and never loses a recording
+just because a provider or network request fails.
+
+## Why I built JFlow
+
+I recently switched back to Linux after leaving my last company and had grown
+used to writing with Wispr Flow. Back on Arch Linux, there was no Wispr Flow or
+alternative that felt right for my setup, so I built my own: **JFlow**. It came
+together in two to three days using free/local models and a transcription
+provider's free tier, with a focus on the things I actually missed: fast
+dictation, reliable retries, good formatting, and a minimal UI.
+
+## What it does
+
+- **Push-to-talk and hands-free modes:** hold `Super+R` to dictate, or use a
+  separate silence-ended hands-free action. JFlow is never always listening.
+- **Noise-reduced PipeWire capture:** integrates with the existing EasyEffects
+  virtual microphone, including its RNNoise and VAD input chain.
+- **Durable recording and retry:** a WAV and job state are saved as you speak;
+  retryable transcription failures retry once automatically and remain
+  recoverable from the Library.
+- **Accurate batch transcription:** the default release-only path uses
+  ElevenLabs Scribe v2 and supports canonical vocabulary keyterms.
+- **Local formatting:** recordings over 15 seconds can be cleaned, rephrased,
+  and structured by Qwen3 running through Ollama on the laptop.
+- **Safe Wayland delivery:** text is inserted only into the originally focused
+  window. If that is no longer safe, the final text is copied for manual paste
+  instead of being typed into the wrong application.
+- **Minimal Quickshell UI:** a bottom-center status pill for recording and
+  recovery, plus an on-demand JFlow Library for history, vocabulary, retries,
+  and formatter inspection.
+- **Private local history and audits:** recordings, transcripts, formatter
+  prompts/responses, feedback, and learned aliases stay on the laptop under
+  your user data directory.
+
+## How a dictation moves through JFlow
+
+```text
+Super+R hold → PipeWire / EasyEffects → saved WAV job → Scribe v2 after release
+                                                       ↓
+                                 local Qwen formatting (>15 seconds, optional)
+                                                       ↓
+                                      safe wtype insertion into original app
+```
+
+If a cloud transcription step fails, the saved job is retried and remains
+available in the Library. It is never discarded merely because the connection
+or provider was unavailable.
 
 Read [the implementation handoff](docs/IMPLEMENTATION.md) for the design,
 reliability decisions, current setup, and next steps.
