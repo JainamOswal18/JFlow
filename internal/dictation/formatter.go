@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 var formatterHTTPClient = &http.Client{}
@@ -49,7 +50,7 @@ type formatterDocument struct {
 func formatterDeadline(raw string, cfg FormatterConfig) time.Duration {
 	seconds := cfg.TimeoutSecs
 	if seconds <= 0 {
-		seconds = 10
+		seconds = 15
 	}
 	words := len(strings.Fields(raw))
 	if words > 250 && seconds < 60 {
@@ -170,11 +171,34 @@ func FormatWithOllama(ctx context.Context, raw, hint string, cfg FormatterConfig
 // the model, so normal cleanup and rephrasing remain possible.
 func normalizeFormatterDocument(document formatterDocument, source string) formatterDocument {
 	blocks := make([]formatterBlock, 0, len(document.Blocks))
-	for index, block := range document.Blocks {
+	for index := 0; index < len(document.Blocks); index++ {
+		block := document.Blocks[index]
 		if block.Type == "heading" {
 			hasListNext := index+1 < len(document.Blocks) && (document.Blocks[index+1].Type == "numbered" || document.Blocks[index+1].Type == "bullets")
-			if !hasListNext || !textOccursInSource(block.Text, source) {
+			if hasListNext && textOccursInSource(block.Text, source) {
+				blocks = append(blocks, block)
 				continue
+			}
+			if !textOccursInSource(block.Text, source) {
+				continue
+			}
+			// A small formatter can mistakenly label a source sentence as a
+			// heading. Preserve it as prose rather than silently dropping it.
+			// When the next paragraph starts as a grammatical continuation,
+			// join the two mechanical fragments back into one sentence.
+			if index+1 < len(document.Blocks) && document.Blocks[index+1].Type == "paragraph" {
+				next := document.Blocks[index+1]
+				if textOccursInSource(block.Text, next.Text) {
+					continue // the next paragraph already contains this source text
+				}
+				if startsParagraphContinuation(next.Text) {
+					block = formatterBlock{Type: "paragraph", Text: strings.TrimSpace(block.Text) + " " + strings.TrimSpace(next.Text)}
+					index++
+				} else {
+					block.Type = "paragraph"
+				}
+			} else {
+				block.Type = "paragraph"
 			}
 		}
 		if block.Type != "paragraph" {
@@ -201,6 +225,13 @@ func normalizeFormatterDocument(document formatterDocument, source string) forma
 	}
 	document.Blocks = blocks
 	return document
+}
+
+func startsParagraphContinuation(text string) bool {
+	for _, r := range strings.TrimSpace(text) {
+		return unicode.IsLower(r)
+	}
+	return false
 }
 
 // splitLongParagraph is a generic readability guard for small-model output.

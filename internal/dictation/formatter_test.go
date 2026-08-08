@@ -99,8 +99,8 @@ func TestFormatWithOllamaRendersMixedBlockDocument(t *testing.T) {
 
 func TestFormatterDeadlineScalesWithTranscriptSize(t *testing.T) {
 	cfg := DefaultConfig().Formatter
-	if got := formatterDeadline("a short dictation", cfg); got != 10*time.Second {
-		t.Fatalf("short deadline = %s, want 10s", got)
+	if got := formatterDeadline("a short dictation", cfg); got != 15*time.Second {
+		t.Fatalf("short deadline = %s, want 15s", got)
 	}
 	medium := strings.Repeat("word ", 101)
 	if got := formatterDeadline(medium, cfg); got != 30*time.Second {
@@ -166,6 +166,23 @@ func TestNormalizeFormatterDocumentUsesGeneralEnumerationGrammar(t *testing.T) {
 	unchanged := normalizeFormatterDocument(formatterDocument{Blocks: []formatterBlock{{Type: "paragraph", Text: "The first draft was better than the second draft."}}}, "The first draft was better than the second draft.")
 	if len(unchanged.Blocks) != 1 || unchanged.Blocks[0].Type != "paragraph" {
 		t.Fatalf("ordinary comparison must remain prose: %#v", unchanged.Blocks)
+	}
+}
+
+func TestNormalizeFormatterDocumentPreservesSourceSentenceMistakenForHeading(t *testing.T) {
+	source := "I checked the new build this morning and it feels much smoother now. The retry button still bothers me."
+	document := formatterDocument{Blocks: []formatterBlock{
+		{Type: "heading", Text: "I checked the new build this morning"},
+		{Type: "paragraph", Text: "and it feels much smoother now."},
+		{Type: "heading", Text: "The retry button still bothers me"},
+	}}
+	got := normalizeFormatterDocument(document, source)
+	want := []formatterBlock{
+		{Type: "paragraph", Text: "I checked the new build this morning and it feels much smoother now."},
+		{Type: "paragraph", Text: "The retry button still bothers me"},
+	}
+	if !equalFormatterBlocks(got.Blocks, want) {
+		t.Fatalf("source heading must be preserved as prose: %#v, want %#v", got.Blocks, want)
 	}
 }
 

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Run by Hyprland once its Wayland session is ready. User services inherit
+# their environment only when they are started, so restart JFlow after the
+# current compositor variables have been imported into the user manager.
+set -euo pipefail
+
+: "${WAYLAND_DISPLAY:?dictationd-session-ready must run inside a Wayland session}"
+
+dbus-update-activation-environment --systemd \
+  WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE
+systemctl --user import-environment \
+  WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE
+systemctl --user restart dictationd.service dictationd-ui.service

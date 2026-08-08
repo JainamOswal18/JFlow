@@ -76,12 +76,25 @@ the provided user units and UI asset:
 ```bash
 mkdir -p ~/.config/systemd/user ~/.local/share/dictationd/ui ~/.local/share/applications
 cp packaging/systemd/dictationd*.service ~/.config/systemd/user/
+install -Dm0755 scripts/dictationd-session-ready ~/.local/bin/dictationd-session-ready
 cp ui/VoiceFlow.qml ~/.local/share/dictationd/ui/
 cp ui/JFlow.qml ~/.local/share/dictationd/ui/
 cp packaging/desktop/JFlow.desktop ~/.local/share/applications/
 systemctl --user daemon-reload
 systemctl --user enable --now dictationd.service dictationd-ui.service
 ```
+
+For reliable text insertion after a fresh login, add the following line to
+Hyprland's startup block *after* its other session-environment setup (the same
+line is available in `integrations/hypr/session.lua`):
+
+```lua
+hl.exec_cmd("$HOME/.local/bin/dictationd-session-ready")
+```
+
+It imports the active Wayland display into systemd and restarts JFlow once.
+This is needed because services started before Hyprland has exported
+`WAYLAND_DISPLAY` cannot use `wtype` or `wl-copy` later.
 
 After editing credentials, load them with:
 
@@ -282,7 +295,8 @@ sudo install -D -m 0755 ~/Code/dictationd/scripts/dictationd-resume \
 
 It restarts only `dictationd.service` and `dictationd-ui.service` after a
 completed suspend or hibernate; it does not run before sleep or alter power
-settings.
+settings. The Hyprland session-ready command above covers fresh graphical
+logins; keep both safeguards installed.
 
 Transient transcription failures retry automatically once after three seconds.
 If both attempts fail, the local recording is retained for manual retry; the
